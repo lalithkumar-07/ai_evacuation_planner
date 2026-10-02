@@ -1,0 +1,27 @@
+# Tunable parameters. Change here, not in code.
+simulation:
+  dt_s: 30                 # simulation step (seconds)
+  duration_s: 10800        # 3 h
+  trap_timeout_s: 1800     # waiting longer than this marks an evacuee TRAPPED
+  forecast_horizon_s: 1800 # look-ahead of the risk predictor
+
+routing_weights:           # dynamic edge cost (section 8 of the spec)
+  w_distance: 1.0          # per km
+  w_time: 1.0              # per minute
+  w_risk: 2.0              # per (risk * 100 m)
+  w_congestion: 1.0        # per (load/capacity * km)
+  w_accessibility: 2.0     # per ((1 - accessibility) * km)
+  w_shelter_risk: 10.0
+  w_shelter_fill: 2.0
+
+risk_thresholds:           # hazard level at which a road changes status
+  blocked: 0.6
+  dangerous: 0.4
+  restricted: 0.2
+
+risk_levels:               # risk score -> label
+  medium: 0.25
+  high: 0.5
+  critical: 0.75
+
+risk_function: weighted_sum

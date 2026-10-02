@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Disaster Evacuation Planner (prototype)</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <h1>AI Disaster Evacuation Planner</h1>
+  <p class="banner">Prototype scenario: synthetic roads, population and shelters. Not a real place or real disaster behaviour.</p>
+</header>
+
+<div class="layout">
+  <aside class="panel" aria-label="Scenario controls">
+    <h2>Scenario</h2>
+    <label for="disaster">Disaster type</label>
+    <select id="disaster"><option value="flood">Flood</option><option value="wildfire">Wildfire</option><option value="earthquake">Earthquake</option></select>
+
+    <label for="intensity">Intensity: <b id="intensityVal">0.90</b></label>
+    <input id="intensity" type="range" min="0.2" max="1" step="0.05" value="0.9">
+
+    <label for="preset">Scenario preset</label>
+    <select id="preset"></select>
+    <p id="presetDesc" class="muted"></p>
+
+    <label for="strategy">Evacuation strategy</label>
+    <select id="strategy">
+      <option value="proposed">Proposed: risk-aware, dynamic</option>
+      <option value="baseline">Baseline: nearest shelter, shortest path</option>
+    </select>
+
+    <button id="bGenerate" class="primary">1. Generate scenario</button>
+    <p class="muted" id="routeHint">Then click the map to choose an evacuation origin.</p>
+
+    <h2>Simulation</h2>
+    <div class="row">
+      <button id="bStart" disabled>Start evacuation</button>
+      <button id="bPause" disabled>Pause</button>
+      <button id="bResume" disabled>Resume</button>
+      <button id="bStep" disabled>Step</button>
+      <button id="bReset" disabled>Reset</button>
+    </div>
+    <label for="speed">Speed: <b id="speedVal">2</b> steps per tick (30 s each)</label>
+    <input id="speed" type="range" min="1" max="20" value="2">
+    <button id="bCompare" disabled>Compare baseline and proposed</button>
+    <p id="msg" class="muted" role="status"></p>
+  </aside>
+
+  <main>
+    <div class="mapwrap"><div id="map"></div>
+      <div id="legend" class="legend"></div></div>
+
+    <section class="cards" aria-label="Live metrics">
+      <div class="card"><b id="cTime">00:00</b><span>Simulation time</span></div>
+      <div class="card"><b id="cTotal">0</b><span>Population</span></div>
+      <div class="card"><b id="cAffected">0</b><span>Affected (home in hazard)</span></div>
+      <div class="card"><b id="cAtRisk">0</b><span>At risk now</span></div>
+      <div class="card"><b id="cEvac">0</b><span>Evacuated</span></div>
+      <div class="card"><b id="cRem">0</b><span>Remaining</span></div>
+      <div class="card"><b id="cShel">0</b><span>Shelters active</span></div>
+      <div class="card"><b id="cBlock">0</b><span>Blocked roads</span></div>
+      <div class="card"><b id="cRer">0</b><span>Reroutes</span></div>
+      <div class="card"><b id="cRisk" class="lvl">LOW</b><span>Peak risk faced by evacuees</span></div>
+    </section>
+
+    <section class="two">
+      <div class="panel"><h2>Route plan: baseline vs proposed</h2><div id="routeTable" class="muted">Generate a scenario to see routes.</div></div>
+      <div class="panel"><h2>Evacuation analytics</h2><canvas id="chart" height="150"></canvas></div>
+    </section>
+
+    <section id="cmp" class="panel hidden"><h2>Baseline vs proposed (full simulation runs)</h2>
+      <div class="two"><div id="cmpTable"></div><canvas id="cmpChart" height="170"></canvas></div></section>
+  </main>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="js/map.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/simulation.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
