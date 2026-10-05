@@ -1,57 +1,48 @@
 from fastapi import APIRouter
 
+from backend.api.dependencies import SessionId
 from backend.schemas.evacuation import StartIn, StepIn
-from backend.services import scenario_service as scen
 from backend.services import simulation_service as svc
-from src.simulation.metrics import summarize
 
 router = APIRouter(prefix="/api", tags=["simulation"])
 
 
 @router.post("/simulation/start")
-def start(body: StartIn):
-    sim = svc.start(scen.get_scenario(body.scenario_id), body.strategy)
-    return {"layers": scen.layers(sim), "state": svc.state(sim)}
+def start(body: StartIn, sid: SessionId):
+    return svc.start_scenario(sid, body.scenario_id, body.strategy)
 
 
 @router.post("/simulation/step")
-def step(body: StepIn = StepIn()):
-    return svc.step(body.steps)
+def step(sid: SessionId, body: StepIn = StepIn()):
+    return svc.step(sid, body.steps)
 
 
 @router.post("/simulation/pause")
-def pause():
-    svc.require()
-    svc.S.paused = True
-    return {"paused": True}
+def pause(sid: SessionId):
+    return svc.set_paused(sid, True)
 
 
 @router.post("/simulation/resume")
-def resume():
-    svc.require()
-    svc.S.paused = False
-    return {"paused": False}
+def resume(sid: SessionId):
+    return svc.set_paused(sid, False)
 
 
 @router.post("/simulation/reset")
-def reset():
-    return svc.state(svc.reset())
+def reset(sid: SessionId):
+    return svc.reset(sid)
 
 
 @router.get("/simulation/status")
-def status():
-    sim = svc.require()
-    return {"scenario_id": svc.S.scenario_id, "strategy": svc.S.strategy, "paused": svc.S.paused,
-            "time_s": sim.t, "finished": sim.finished, "latest": sim.history[-1]}
+def status(sid: SessionId):
+    return svc.status(sid)
 
 
 @router.get("/metrics")
-def metrics():
-    return summarize(svc.require())
+def metrics(sid: SessionId):
+    return svc.metrics(sid)
 
 
 @router.get("/analytics")
-def analytics(scenario_id: str | None = None):
+def analytics(sid: SessionId, scenario_id: str | None = None):
     """Baseline vs proposed on the same scenario (runs both; cached)."""
-    cfg = scen.get_scenario(scenario_id or svc.S.scenario_id or "expanding")
-    return svc.run_comparison(cfg)
+    return svc.analytics(sid, scenario_id)

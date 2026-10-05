@@ -61,7 +61,7 @@ def build_scenario(cfg: ScenarioConfig, dataset: dict | None = None) -> Scenario
 
     shelters = [Shelter(id=s["id"], node=s["node"], x=G.nodes[s["node"]]["x"], y=G.nodes[s["node"]]["y"],
                         capacity=int(round(s["capacity"] * cfg.shelter_capacity_scale)),
-                        occupancy=s.get("occupancy", 0)) for s in ds["shelters"]]
+                        occupancy=s.get("occupancy", 0)) for s in ds["shelters"][:cfg.n_shelters]]
     agents = []
     for g in ds["population"]:
         ordered = dist_c(g["node"]) <= cfg.evacuation_radius_m

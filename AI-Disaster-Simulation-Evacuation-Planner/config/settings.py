@@ -24,6 +24,12 @@ ORIGIN_LAT = float(os.getenv("PLANNER_ORIGIN_LAT", "17.3850"))
 ORIGIN_LON = float(os.getenv("PLANNER_ORIGIN_LON", "78.4867"))
 LOG_LEVEL = os.getenv("PLANNER_LOG_LEVEL", "INFO")
 
+# --- session management (Phase 2) ---
+SESSION_TTL_S = float(os.getenv("PLANNER_SESSION_TTL_S", "1800"))            # idle seconds before a session is dropped
+MAX_SESSIONS = int(os.getenv("PLANNER_MAX_SESSIONS", "50"))                  # oldest-unused session is evicted beyond this
+MAX_CUSTOM_SCENARIOS = int(os.getenv("PLANNER_MAX_CUSTOM_SCENARIOS", "20"))  # per session
+ANALYTICS_CACHE_SIZE = int(os.getenv("PLANNER_ANALYTICS_CACHE_SIZE", "16"))  # cached baseline-vs-proposed runs
+
 _Y = yaml.safe_load((ROOT / "config" / "simulation_config.yaml").read_text()) or {}
 
 
@@ -84,6 +90,7 @@ class ScenarioConfig:
     evacuation_radius_m: float = 2500.0       # people inside are ordered to evacuate
     population_scale: float = 1.0
     shelter_capacity_scale: float = 1.0
+    n_shelters: int = 5                       # how many of the dataset's shelters are open
     shelter_failures: list[list[float]] = field(default_factory=list)  # [[shelter_id, time_s], ...]
     road_closure_count: int = 0
     road_closure_time_s: float = 300.0

@@ -9,7 +9,7 @@ import networkx as nx
 
 
 def generate_synthetic_dataset(grid_size=16, spacing_m=400.0, total_population=6000, group_size=25,
-                               walking_fraction=0.15, max_warning_delay_s=900.0, n_shelters=5,
+                               walking_fraction=0.15, max_warning_delay_s=900.0, n_shelters=8,
                                shelter_capacity=1500, seed=42, center_frac=(0.5, 0.5),
                                core_radius_m=600.0, focus_radius_m=2500.0) -> dict:
     rng = lambda tag: random.Random(f"{seed}-{tag}")

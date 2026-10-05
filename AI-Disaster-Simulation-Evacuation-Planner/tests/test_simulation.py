@@ -44,7 +44,7 @@ def test_metrics_are_computed_not_constant():
 
 def test_api_end_to_end():
     c = TestClient(app)
-    assert c.post("/api/simulation/step", json={"steps": 1}).status_code in (200, 409)
+    assert c.post("/api/simulation/step", json={"steps": 1}).status_code == 409      # nothing started yet
     r = c.post("/api/disaster/start", json={"disaster_type": "flood", "intensity": 0.8, "scenario_id": "expanding"})
     assert r.status_code == 200
     body = r.json()
@@ -64,3 +64,21 @@ def test_api_end_to_end():
     assert c.get("/api/scenarios/nope").status_code == 404
     assert len(c.get("/api/scenarios").json()) >= 7
     assert c.get("/").status_code == 200
+
+
+def test_meta_and_scenario_options():
+    c = TestClient(app)
+    m = c.get("/api/meta").json()
+    assert set(m["disaster_types"]) >= {"flood", "wildfire", "earthquake"} and m["n_shelters_max"] >= 8
+    sc = c.get("/api/scenarios").json()
+    assert len(sc) == 7 and sc[0]["config"]["initial_radius_m"] is not None
+    body = {"disaster_type": "wildfire", "intensity": 0.7, "center_lat": m["bounds"][0][0] + 0.01,
+            "center_lon": m["bounds"][0][1] + 0.01, "initial_radius_m": 500, "max_radius_m": 1200,
+            "spread_speed_mps": 0.5, "population_scale": 2.0, "n_shelters": 3, "shelter_capacity_scale": 0.5,
+            "road_closure_count": 4, "road_closure_time_s": 120, "shelter_failures": [[0, 600]], "duration_s": 3600}
+    r = c.post("/api/disaster/start", json=body).json()
+    cfg = r["layers"]["scenario"]
+    assert cfg["n_shelters"] == 3 and len(r["state"]["shelters"]) == 3 and cfg["population_scale"] == 2.0
+    assert r["state"]["metrics"]["total_population"] == 12000 and r["state"]["disaster"]["radius_m"] == 500
+    assert c.post("/api/disaster/start", json={**body, "max_radius_m": 100}).status_code == 422
+    assert c.post("/api/disaster/start", json={"disaster_enabled": False}).json()["state"]["disaster"] is None
