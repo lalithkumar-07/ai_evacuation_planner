@@ -10,6 +10,6 @@ from src.data.preprocessing import generate_synthetic_dataset  # noqa: E402
 if __name__ == "__main__":
     ds = generate_synthetic_dataset()
     DEMO_SCENARIO_PATH.parent.mkdir(parents=True, exist_ok=True)
-    DEMO_SCENARIO_PATH.write_text(json.dumps(ds, separators=(",", ":")))
+    DEMO_SCENARIO_PATH.write_text(json.dumps(ds, separators=(",", ":")), encoding="utf-8")
     print(f"wrote {DEMO_SCENARIO_PATH}: {len(ds['nodes'])} nodes, {len(ds['edges'])} roads, "
           f"{len(ds['population'])} population groups, {len(ds['shelters'])} shelters")

@@ -30,7 +30,7 @@ MAX_SESSIONS = int(os.getenv("PLANNER_MAX_SESSIONS", "50"))                  # o
 MAX_CUSTOM_SCENARIOS = int(os.getenv("PLANNER_MAX_CUSTOM_SCENARIOS", "20"))  # per session
 ANALYTICS_CACHE_SIZE = int(os.getenv("PLANNER_ANALYTICS_CACHE_SIZE", "16"))  # cached baseline-vs-proposed runs
 
-_Y = yaml.safe_load((ROOT / "config" / "simulation_config.yaml").read_text()) or {}
+_Y = yaml.safe_load((ROOT / "config" / "simulation_config.yaml").read_text(encoding="utf-8")) or {}
 
 
 @dataclass(frozen=True)

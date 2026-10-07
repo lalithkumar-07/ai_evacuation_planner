@@ -36,7 +36,7 @@ class Scenario:
 def _load(path: str) -> dict:
     p = Path(path)
     if p.exists():
-        data = json.loads(p.read_text())
+        data = json.loads(p.read_text(encoding="utf-8"))
     else:
         from src.data.preprocessing import generate_synthetic_dataset
         log.warning("%s not found - generating synthetic data in memory (run scripts/generate_sample_data.py)", p)

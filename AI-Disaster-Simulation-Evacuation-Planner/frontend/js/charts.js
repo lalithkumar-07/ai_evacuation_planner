@@ -1,27 +1,61 @@
-/* Analytics charts (Chart.js). */
+/* Chart.js wrappers: live trends (3 modes) and the baseline-vs-proposed curves. */
 const Charts = (() => {
-  let live = null, cmp = null;
-  const opts = (x, y) => ({animation: false, parsing: false, scales: {x: {type: 'linear', title: {display: true, text: x}}, y: {title: {display: true, text: y}}}});
+  let live = null, cmp = null, series = [], mode = 'evac', cmpData = null, cmpMode = 'evac';
 
-  function resetLive() {
+  function theme() {
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    Chart.defaults.font.size = 11;
+    Chart.defaults.color = cssVar('--muted');
+    Chart.defaults.borderColor = cssVar('--line');
+  }
+  const opts = (yTitle, y2) => ({
+    animation: false, parsing: false, responsive: true, maintainAspectRatio: false,
+    interaction: {mode: 'index', intersect: false},
+    plugins: {legend: {position: 'bottom', labels: {boxWidth: 10, boxHeight: 10, usePointStyle: true}},
+              tooltip: {callbacks: {title: i => i.length ? 'Minute ' + i[0].parsed.x.toFixed(0) : ''}}},
+    scales: {x: {type: 'linear', min: 0, title: {display: true, text: 'minutes'}, ticks: {maxTicksLimit: 7}},
+             y: {beginAtZero: true, title: {display: !!yTitle, text: yTitle}, ticks: {maxTicksLimit: 5}},
+             ...(y2 ? {y2: {position: 'right', beginAtZero: true, grid: {drawOnChartArea: false}, title: {display: true, text: y2}}} : {})},
+  });
+  const line = (label, color, data, extra = {}) => ({label, data, borderColor: color, backgroundColor: color + '22', borderWidth: 2, pointRadius: 0, tension: .25, ...extra});
+
+  const MODES = {
+    evac: () => ({o: opts('people'), ds: [
+      line('Evacuated', cssVar('--ok'), series.map(m => ({x: m.t / 60, y: m.evacuated})), {fill: true}),
+      line('Remaining', cssVar('--crit'), series.map(m => ({x: m.t / 60, y: m.remaining}))),
+      line('At risk now', cssVar('--high'), series.map(m => ({x: m.t / 60, y: m.at_risk})))]}),
+    cong: () => ({o: opts('load / capacity'), ds: [
+      line('Mean congestion', cssVar('--brand'), series.map(m => ({x: m.t / 60, y: +m.congestion_mean.toFixed(3)}))),
+      line('Peak congestion', cssVar('--warn'), series.map(m => ({x: m.t / 60, y: +m.congestion_peak.toFixed(3)})))]}),
+    expo: () => ({o: opts('person-hazard-min', 'reroutes'), ds: [
+      line('Cumulative exposure', cssVar('--high'), series.map(m => ({x: m.t / 60, y: +(m.exposure / 60).toFixed(1)})), {fill: true}),
+      line('Reroutes', cssVar('--brand'), series.map(m => ({x: m.t / 60, y: m.reroutes})), {yAxisID: 'y2', stepped: true})]}),
+  };
+
+  function init() { theme(); build(); }
+  function build() {
     if (live) live.destroy();
-    live = new Chart(document.getElementById('chart'), {type: 'line', options: opts('minutes', 'people'),
-      data: {datasets: [{label: 'Evacuated', data: [], borderColor: '#2e7d32', pointRadius: 0},
-                        {label: 'Remaining', data: [], borderColor: '#c62828', pointRadius: 0},
-                        {label: 'At risk now', data: [], borderColor: '#e8742a', pointRadius: 0}]}});
+    const m = MODES[mode]();
+    live = new Chart($('liveChart'), {type: 'line', data: {datasets: m.ds}, options: m.o});
   }
-  function pushLive(m) {
-    const x = m.t / 60, ds = live.data.datasets;
-    if (ds[0].data.length && ds[0].data.at(-1).x === x) return;
-    ds[0].data.push({x, y: m.evacuated}); ds[1].data.push({x, y: m.remaining}); ds[2].data.push({x, y: m.at_risk});
-    live.update();
-  }
+  function refresh() { const m = MODES[mode](); live.data.datasets = m.ds; live.update('none'); }
+
+  return {
+    init,
+    reset() { series = []; refresh(); },
+    push(m) { if (series.length && series.at(-1).t === m.t) return; series.push(m); refresh(); },
+    setMode(v) { mode = v; build(); },
+    restyle() { theme(); build(); if (cmp) drawComparison(cmpData); },
+    setCmpMode(v) { cmpMode = v; if (cmpData) drawComparison(cmpData); },
+    drawComparison,
+  };
+
   function drawComparison(r) {
+    cmpData = r;
     if (cmp) cmp.destroy();
-    const s = a => a.map(m => ({x: m.t / 60, y: m.evacuated}));
-    cmp = new Chart(document.getElementById('cmpChart'), {type: 'line', options: opts('minutes', 'people evacuated'),
-      data: {datasets: [{label: 'Baseline', data: s(r.baseline.series), borderColor: '#8e24aa', pointRadius: 0},
-                        {label: 'Proposed', data: s(r.proposed.series), borderColor: '#0f6b6f', pointRadius: 0}]}});
+    const f = s => s.map(m => ({x: m.t / 60, y: cmpMode === 'evac' ? m.evacuated : +(m.exposure / 60).toFixed(1)}));
+    cmp = new Chart($('cmpChart'), {type: 'line', options: opts(cmpMode === 'evac' ? 'people evacuated' : 'person-hazard-min'),
+      data: {datasets: [line('Baseline', cssVar('--route-base'), f(r.baseline.series), {borderDash: [6, 4]}),
+                        line('Proposed', cssVar('--route-new'), f(r.proposed.series))]}});
   }
-  return {resetLive, pushLive, drawComparison};
 })();

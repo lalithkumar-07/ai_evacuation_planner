@@ -1,6 +1,15 @@
 """FastAPI entrypoint. Thin API layer: logic lives in backend/services and src/."""
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# Make the project root importable no matter where this is started from
+# (e.g. `cd backend` then `uvicorn main:app`, which otherwise fails with "No module named 'backend'").
+_ROOT = str(Path(__file__).resolve().parents[1])
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -40,3 +49,8 @@ async def _ve(_: Request, exc: ValueError):
 
 
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+
+
+if __name__ == "__main__":          # `python backend/main.py` works too
+    from run import main
+    main()
