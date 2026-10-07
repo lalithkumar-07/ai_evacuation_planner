@@ -3,8 +3,8 @@ const MapView = (() => {
   const ROAD = {OPEN: '#8fa3a0', CONGESTED: '#d9a400', RESTRICTED: '#e6c84a', DANGEROUS: '#e8742a', BLOCKED: '#c62828'};
   const AGENT = {AT_HOME: '#607d8b', TRAVELING: '#1565c0', REROUTING: '#00838f', WAITING: '#8e24aa', TRAPPED: '#111', AT_SHELTER: '#2e9e5b', SAFE: '#b0bec5'};
   const RISK = ['#2e9e5b', '#e3b505', '#ec7a1c', '#cf2f2f'];                    // low, medium, high, critical
-  const TILES = {light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-                 dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'};
+  const TILES = {light: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                 dark: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'};
   const LAYERS = [['hazard', 'Disaster zone', '#cf2f2f'], ['risk', 'Risk map', '#ec7a1c'], ['roads', 'Roads', '#8fa3a0'],
                   ['population', 'People', '#42a5f5'], ['shelters', 'Shelters', '#2e9e5b'], ['agents', 'Evacuees', '#0b6e99'], ['routes', 'Routes', '#e8a400']];
   let map, tile, groups = {}, roads = [], nodes = [], dots = [], shelterMarks = [], hazardRings = [], levels = {medium: .25, high: .5, critical: .75};
