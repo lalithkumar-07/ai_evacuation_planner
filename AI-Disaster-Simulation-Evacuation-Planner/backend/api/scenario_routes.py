@@ -14,6 +14,12 @@ def meta():
     return svc.meta()
 
 
+@meta_router.get("/dataset")
+def dataset():
+    """The active dataset: name, kind (synthetic / real / mixed), per-layer provenance, stats, warnings."""
+    return svc.dataset_info_for_api()
+
+
 @router.get("")
 def list_all(sid: SessionId):
     return svc.list_for_session(sid)

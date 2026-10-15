@@ -10,11 +10,12 @@ from dataclasses import replace
 from backend.schemas.disaster import DisasterStartIn
 from backend.schemas.scenario import ScenarioIn
 from backend.services.session_store import STORE, SessionData
-from config.settings import MAX_CUSTOM_SCENARIOS, RISK_LEVELS, ScenarioConfig
-from src.data.data_loader import load_dataset
+from config.settings import CARTO_API_KEY, MAX_CUSTOM_SCENARIOS, RISK_LEVELS, ScenarioConfig
+from src.data.data_loader import dataset_info, load_dataset
+from src.data.schema import frame_of
 from src.disaster.hazard_model import DISASTER_PRESETS
 from src.graph.graph_utils import undirected_edges
-from src.utils.helpers import from_latlon, node_latlon, to_latlon
+from src.utils.helpers import graph_frame, node_latlon
 
 
 class NotFound(LookupError):
@@ -58,18 +59,17 @@ def get_scenario(scenario_id: str, session: SessionData | None = None) -> Scenar
     raise NotFound(f"Unknown scenario '{scenario_id}'")
 
 
-def _extent() -> float:
-    m = load_dataset()["meta"]
-    return (m["grid_size"] - 1) * m["spacing_m"]
+def _frame():
+    return frame_of(load_dataset())
 
 
 def resolved(cfg: ScenarioConfig) -> dict:
     """Config with preset defaults filled in and the epicentre expressed as lat/lon (for the UI form)."""
-    d, p, ext = cfg.to_dict(), DISASTER_PRESETS[cfg.disaster_type], _extent()
+    d, p, fr = cfg.to_dict(), DISASTER_PRESETS[cfg.disaster_type], _frame()
     for k in ("initial_radius_m", "max_radius_m", "spread_speed_mps"):
         if d[k] is None:
             d[k] = p[k]
-    d["center_lat"], d["center_lon"] = to_latlon(cfg.center_x_frac * ext, cfg.center_y_frac * ext, ext)
+    d["center_lat"], d["center_lon"] = fr.to_latlon(cfg.center_x_frac * fr.width_m, cfg.center_y_frac * fr.height_m)
     return d
 
 
@@ -80,9 +80,9 @@ def live_from_request(body: DisasterStartIn, session: SessionData) -> ScenarioCo
     if "shelter_failures" in f:
         f["shelter_failures"] = [list(x) for x in f["shelter_failures"]]
     if body.center_lat is not None and body.center_lon is not None:
-        ext = _extent()
-        x, y = from_latlon(body.center_lat, body.center_lon, ext)
-        f["center_x_frac"], f["center_y_frac"] = (min(1.0, max(0.0, v / ext)) for v in (x, y))
+        fr = _frame()
+        x, y = fr.from_latlon(body.center_lat, body.center_lon)
+        f["center_x_frac"], f["center_y_frac"] = (min(1.0, max(0.0, v / size)) for v, size in ((x, fr.width_m), (y, fr.height_m)))
     cfg = replace(base, id="live", name=f"Live: {body.disaster_type}", **f)
     r = resolved(cfg)
     if r["max_radius_m"] < r["initial_radius_m"]:
@@ -90,12 +90,17 @@ def live_from_request(body: DisasterStartIn, session: SessionData) -> ScenarioCo
     return cfg
 
 
+def dataset_info_for_api() -> dict:
+    return dataset_info()
+
+
 def meta() -> dict:
     """Everything the UI needs to build its option controls (same for every user)."""
-    ds, ext = load_dataset(), _extent()
+    ds, fr, info = load_dataset(), _frame(), dataset_info()
     return {
-        "synthetic": True, "extent_m": ext,
-        "bounds": [to_latlon(0, 0, ext), to_latlon(ext, ext, ext)],
+        "synthetic": info["kind"] == "synthetic", "dataset": {"name": info["name"], "kind": info["kind"]},
+        "tiles": {"carto_key": CARTO_API_KEY or None},          # lets the map offer CARTO tiles only when a key exists
+        "extent_m": max(fr.width_m, fr.height_m), "bounds": fr.bounds(),
         "base_population": sum(g["size"] for g in ds["population"]),
         "n_shelters_max": len(ds["shelters"]), "base_shelter_capacity": ds["shelters"][0]["capacity"],
         "disaster_types": {k: {"label": k.title(), "blurb": BLURBS.get(k, ""), **v} for k, v in DISASTER_PRESETS.items()},
@@ -112,12 +117,13 @@ def layers(sim) -> dict:
         pop[a.origin] = pop.get(a.origin, 0) + a.size
         if a.ordered:
             ordered_nodes.add(a.origin)
-    ext = G.graph["extent"]
+    fr = graph_frame(G)
     return {
-        "synthetic": True,
+        "synthetic": G.graph.get("dataset_kind", "synthetic") == "synthetic",
+        "dataset": {"name": G.graph.get("dataset_name"), "kind": G.graph.get("dataset_kind"), "layers": G.graph.get("provenance")},
         "scenario": sim.cfg.to_dict(),
         "risk_levels": {"medium": RISK_LEVELS.medium, "high": RISK_LEVELS.high, "critical": RISK_LEVELS.critical},
-        "bounds": [to_latlon(0, 0, ext), to_latlon(ext, ext, ext)],
+        "bounds": fr.bounds(),
         "roads": [{"a": node_latlon(G, u), "b": node_latlon(G, v), "arterial": G[u][v]["arterial"]}
                   for u, v in undirected_edges(G)],
         "nodes": [node_latlon(G, n) for n in sorted(G.nodes)],

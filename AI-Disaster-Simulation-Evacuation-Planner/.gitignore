@@ -7,3 +7,11 @@ models/trained/*
 models/checkpoints/*
 !models/**/.gitkeep
 venv/
+
+# data: raw inputs, third-party downloads and pipeline outputs stay local; the synthetic sample is committed
+data/raw/*/*
+!data/raw/*/.gitkeep
+data/external/*
+!data/external/.gitkeep
+data/processed/*
+!data/processed/.gitkeep

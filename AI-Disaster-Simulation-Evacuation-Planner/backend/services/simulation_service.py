@@ -16,7 +16,7 @@ from src.disaster.risk_calculator import risk_level
 from src.graph.graph_utils import SEVERITY, undirected_edges
 from src.simulation.metrics import summarize
 from src.simulation.simulation_engine import Simulation
-from src.utils.helpers import node_latlon, to_latlon
+from src.utils.helpers import graph_frame, node_latlon, to_latlon
 
 log = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ def _xy(sim: Simulation, a) -> tuple[float, float]:
 
 
 def state(sim: Simulation, paused: bool = False) -> dict:
-    G, ext, d = sim.G, sim.G.graph["extent"], sim.disaster
+    G, ext, d = sim.G, graph_frame(sim.G), sim.disaster
     roads = []
     for u, v in undirected_edges(G):
         worst = max((G[u][v], G[v][u]), key=lambda e: SEVERITY.index(e["status"]))

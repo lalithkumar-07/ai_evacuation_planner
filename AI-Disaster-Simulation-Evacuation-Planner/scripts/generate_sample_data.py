@@ -1,5 +1,6 @@
 """Generate data/sample/demo_scenario.json (SYNTHETIC). Usage: python scripts/generate_sample_data.py"""
 import json
+import numpy 
 import sys
 from pathlib import Path
 

@@ -3,11 +3,19 @@ const MapView = (() => {
   const ROAD = {OPEN: '#8fa3a0', CONGESTED: '#d9a400', RESTRICTED: '#e6c84a', DANGEROUS: '#e8742a', BLOCKED: '#c62828'};
   const AGENT = {AT_HOME: '#607d8b', TRAVELING: '#1565c0', REROUTING: '#00838f', WAITING: '#8e24aa', TRAPPED: '#111', AT_SHELTER: '#2e9e5b', SAFE: '#b0bec5'};
   const RISK = ['#2e9e5b', '#e3b505', '#ec7a1c', '#cf2f2f'];                    // low, medium, high, critical
-  const TILES = {light: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                 dark: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'};
+  /* Basemaps. CARTO watermarks keyless tiles ("API KEY REQUIRED") since Aug 2026, so the default is keyless
+     OpenStreetMap; CARTO is offered only when PLANNER_CARTO_API_KEY is set; "Plain" needs no network at all. */
+  const BASEMAPS = {
+    osm: {label: 'Streets (OSM)', attr: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          url: () => 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'},
+    carto: {label: 'Clean (CARTO)', attr: '© OpenStreetMap contributors © <a href="https://carto.com/attributions">CARTO</a>',
+            url: (key, theme) => `https://{s}.basemaps.cartocdn.com/rastertiles/${theme === 'dark' ? 'dark_all' : 'light_all'}/{z}/{x}/{y}.png?key=${encodeURIComponent(key)}`},
+    plain: {label: 'Plain (no map)'},
+  };
+  let tileCfg = {carto_key: null}, basemap = 'osm', basemapSelect = null, overlayNote = 'overlays: simulated evacuation data';
   const LAYERS = [['hazard', 'Disaster zone', '#cf2f2f'], ['risk', 'Risk map', '#ec7a1c'], ['roads', 'Roads', '#8fa3a0'],
                   ['population', 'People', '#42a5f5'], ['shelters', 'Shelters', '#2e9e5b'], ['agents', 'Evacuees', '#0b6e99'], ['routes', 'Routes', '#e8a400']];
-  let map, tile, groups = {}, roads = [], nodes = [], dots = [], shelterMarks = [], hazardRings = [], levels = {medium: .25, high: .5, critical: .75};
+  let map, tile = null, groups = {}, roads = [], nodes = [], dots = [], shelterMarks = [], hazardRings = [], levels = {medium: .25, high: .5, critical: .75};
   let epi = null, preview = [], originMark = null, routeLines = {}, pick = false, bounds = null, h = {};
 
   function init(handlers) {
@@ -15,8 +23,9 @@ const MapView = (() => {
     map = L.map('map', {preferCanvas: true, zoomControl: false, attributionControl: false}).setView([17.385, 78.4867], 13);
     L.control.zoom({position: 'topright'}).addTo(map);
     L.control.attribution({prefix: false, position: 'bottomleft'}).addTo(map);
-    tile = L.tileLayer(TILES[document.body.dataset.theme] || TILES.light,
-      {attribution: '© OpenStreetMap · © CARTO · overlays are synthetic', maxZoom: 19}).addTo(map);
+    map.attributionControl.addAttribution(overlayNote);
+    addBasemapControl();
+    loadTileConfig();
     [...LAYERS.map(l => l[0]), 'preview'].forEach(k => groups[k] = L.layerGroup().addTo(map));
 
     const chips = $('layerChips');
@@ -34,6 +43,61 @@ const MapView = (() => {
 
     map.on('click', e => { if (pick) { placeEpicentre(e.latlng, true); setPick(false); } else h.onOrigin(e.latlng); });
     new ResizeObserver(() => map.invalidateSize()).observe($('map'));
+  }
+
+  /* ---- basemaps ---------------------------------------------------------------------------------------- */
+  const theme = () => document.body.dataset.theme === 'dark' ? 'dark' : 'light';
+  const available = () => ['osm', ...(tileCfg.carto_key ? ['carto'] : []), 'plain'];
+  function chosenBasemap() {
+    let saved = null; try { saved = localStorage.getItem('evac.basemap'); } catch (e) { /* ignore */ }
+    return available().includes(saved) ? saved : (tileCfg.carto_key ? 'carto' : 'osm');
+  }
+  async function loadTileConfig() {
+    try { const m = await API.get('/meta'); tileCfg = m.tiles || tileCfg; } catch (e) { /* offline backend: keyless default */ }
+    refreshBasemapSelect(); applyBasemap(chosenBasemap());
+  }
+  function addBasemapControl() {
+    const Ctl = L.Control.extend({
+      options: {position: 'topright'},
+      onAdd() {
+        const box = L.DomUtil.create('div', 'leaflet-bar');
+        basemapSelect = el('select', {'aria-label': 'Map style', title: 'Map style',
+          style: 'font:inherit;font-size:.78rem;padding:.3rem .4rem;border:0;border-radius:4px;background:var(--surface);color:var(--ink);max-width:11rem;cursor:pointer'});
+        basemapSelect.onchange = () => applyBasemap(basemapSelect.value, true);
+        box.append(basemapSelect); L.DomEvent.disableClickPropagation(box); return box;
+      }});
+    map.addControl(new Ctl());
+  }
+  function refreshBasemapSelect() {
+    if (!basemapSelect) return;
+    basemapSelect.replaceChildren(...available().map(k => el('option', {value: k}, BASEMAPS[k].label)));
+    basemapSelect.value = basemap;
+  }
+  function applyBasemap(key, persist) {
+    if (!available().includes(key)) key = 'plain';
+    if (tile) { map.removeLayer(tile); tile = null; }
+    basemap = key;
+    if (persist) { try { localStorage.setItem('evac.basemap', key); } catch (e) { /* ignore */ } }
+    if (basemapSelect) basemapSelect.value = key;
+    $('map').classList.toggle('plain', key === 'plain');
+    // OSM has no dark style: invert its tiles in dark mode.
+    map.getPane('tilePane').style.filter = key === 'osm' && theme() === 'dark' ? 'invert(1) hue-rotate(180deg) brightness(.92) contrast(.9)' : '';
+    if (key === 'plain') return;
+    const b = BASEMAPS[key];
+    let loaded = 0, failed = 0;
+    tile = L.tileLayer(b.url(tileCfg.carto_key, theme()), {attribution: b.attr, maxZoom: 19}).addTo(map);
+    tile.on('tileload', () => { loaded++; });
+    tile.on('tileerror', () => {                        // blocked / offline / rejected: don't leave a broken map
+      failed++;
+      if (failed >= 8 && loaded === 0 && basemap === key) {
+        toast('Map tiles could not be loaded, showing a plain background instead.', 'error', 6000);
+        applyBasemap('plain');
+      }
+    });
+  }
+  function setOverlayNote(text) {
+    if (!map) return;
+    map.attributionControl.removeAttribution(overlayNote); overlayNote = text; map.attributionControl.addAttribution(text);
   }
 
   const riskColor = r => RISK[r >= levels.critical ? 3 : r >= levels.high ? 2 : r >= levels.medium ? 1 : 0];
@@ -132,7 +196,8 @@ const MapView = (() => {
     isPicking: () => pick,
     flyTo: (ll, z = 15) => map.flyTo(ll, z, {duration: .6}),
     openShelter: id => { const m = shelterMarks[id]; if (m) { map.flyTo(m.getLatLng(), Math.max(map.getZoom(), 15), {duration: .6}); m.openPopup(); } },
-    setTheme: t => tile.setUrl(TILES[t]),
+    setTheme: () => applyBasemap(basemap),
+    setBasemap: k => applyBasemap(k, true), setOverlayNote,
     invalidate: () => map.invalidateSize(),
   };
 })();

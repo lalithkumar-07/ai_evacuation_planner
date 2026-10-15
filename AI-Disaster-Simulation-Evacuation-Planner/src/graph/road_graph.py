@@ -4,8 +4,8 @@ from __future__ import annotations
 import networkx as nx
 
 from config.settings import RiskThresholds
+from src.data.schema import dataset_kind, frame_of, layer_sources
 from src.graph.graph_utils import RoadStatus
-
 ARTERIAL_SPEED = 13.9   # m/s (50 km/h)
 LOCAL_SPEED = 8.3       # m/s (30 km/h)
 WALK_SPEED = 1.4        # m/s
@@ -16,16 +16,20 @@ ACCESS = {"OPEN": 1.0, "CONGESTED": 0.7, "RESTRICTED": 0.5, "DANGEROUS": 0.25, "
 
 def build_graph(dataset: dict) -> nx.DiGraph:
     meta = dataset["meta"]
-    G = nx.DiGraph(extent=(meta["grid_size"] - 1) * meta["spacing_m"])
+    frame = frame_of(dataset)
+    G = nx.DiGraph(extent=max(frame.width_m, frame.height_m), frame=frame, width=frame.width_m, height=frame.height_m,
+                   dataset_name=meta.get("name", "unnamed"), dataset_kind=dataset_kind(dataset),
+                   provenance=layer_sources(dataset))
     for n in dataset["nodes"]:
         G.add_node(n["id"], x=n["x"], y=n["y"], hazard=0.0, risk=0.0)
     for e in dataset["edges"]:
-        speed = ARTERIAL_SPEED if e["arterial"] else LOCAL_SPEED
+        arterial = bool(e.get("arterial", False))
+        speed = ARTERIAL_SPEED if arterial else LOCAL_SPEED
         for a, b in ((e["u"], e["v"]), (e["v"], e["u"])):
-            G.add_edge(a, b, distance=e["distance"], arterial=e["arterial"], free_speed=speed,
+            G.add_edge(a, b, distance=e["distance"], arterial=arterial, free_speed=speed,
                        base_time=e["distance"] / speed, current_time=e["distance"] / speed,
-                       speed_vehicle=speed, speed_walk=WALK_SPEED,
-                       capacity=PERSONS_PER_M[e["arterial"]] * e["distance"],
+                       speed_vehicle=speed, speed_walk=WALK_SPEED, road_class=e.get("road_class"),
+                       capacity=PERSONS_PER_M[arterial] * e["distance"],
                        hazard=0.0, risk=0.0, accessibility=1.0, congestion=0.0,
                        status=RoadStatus.OPEN.value, forced_closed=False)
     return G

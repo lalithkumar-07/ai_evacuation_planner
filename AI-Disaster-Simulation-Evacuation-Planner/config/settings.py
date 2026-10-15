@@ -17,6 +17,20 @@ except ImportError:  # python-dotenv is optional
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = Path(os.getenv("PLANNER_DATA_DIR", ROOT / "data"))
 DEMO_SCENARIO_PATH = DATA_DIR / "sample" / "demo_scenario.json"
+
+
+def _resolve_path(value: str | None, default: Path) -> Path:
+    if not value:
+        return default
+    p = Path(value)
+    return p if p.is_absolute() else ROOT / p
+
+
+# Which dataset the app runs on. Default = the synthetic demo. Point it at a processed real dataset with
+#   PLANNER_DATASET=data/processed/<name>.json
+DATASET_PATH = _resolve_path(os.getenv("PLANNER_DATASET"), DEMO_SCENARIO_PATH)
+# Optional free key from https://carto.com/basemaps/apikey/ (CARTO watermarks keyless tiles since Aug 2026)
+CARTO_API_KEY = os.getenv("PLANNER_CARTO_API_KEY", "").strip()
 FRONTEND_DIR = ROOT / "frontend"
 HOST = os.getenv("PLANNER_HOST", "127.0.0.1")
 PORT = int(os.getenv("PLANNER_PORT", "8000"))
