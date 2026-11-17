@@ -22,3 +22,8 @@ class DeterministicForecastPredictor:
 
     def predict_hazard(self, disaster, x, y, t):
         return 0.0 if disaster is None else disaster.hazard_at(x, y, t + self.horizon_s)
+    
+    def signature(self, disaster, t):
+        """Changes whenever predict_hazard's output could change. Predictors without it are never skipped."""
+        return None if disaster is None else disaster.state_key(t + self.horizon_s)
+    

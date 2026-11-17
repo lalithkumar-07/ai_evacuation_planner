@@ -17,7 +17,7 @@ import networkx as nx
 
 from config.settings import DATASET_PATH, DEMO_SCENARIO_PATH, ScenarioConfig
 from src.data.schema import ValidationReport, describe_dataset, validate_dataset
-from src.disaster.hazard_model import Disaster, make_disaster
+from src.disaster.hazard_model import Disaster, area_scale, make_disaster
 from src.graph.graph_utils import undirected_edges
 from src.graph.road_graph import build_graph
 from src.routing.shelter_assignment import Shelter
@@ -99,4 +99,4 @@ def build_scenario(cfg: ScenarioConfig, dataset: dict | None = None) -> Scenario
         picks = random.Random(f"{cfg.seed}-closures").sample(near, min(cfg.road_closure_count, len(near)))
         closures = [(u, v, cfg.road_closure_time_s) for u, v in picks]
 
-    return Scenario(G, shelters, agents, make_disaster(cfg, center), closures, center)
+    return Scenario(G, shelters, agents, make_disaster(cfg, center, area_scale(G.graph["width"],G.graph["height"])), closures, center)

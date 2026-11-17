@@ -6,15 +6,16 @@ import networkx as nx
 from config.settings import RiskThresholds
 from src.data.schema import dataset_kind, frame_of, layer_sources
 from src.graph.graph_utils import RoadStatus
-ARTERIAL_SPEED = 13.9   # m/s (50 km/h)
-LOCAL_SPEED = 8.3       # m/s (30 km/h)
+from src.graph.road_classes import resolve_edge
+
 WALK_SPEED = 1.4        # m/s
-PERSONS_PER_M = {True: 0.5, False: 0.2}   # road capacity: people on a segment per metre
 SPEED_MULT = {"OPEN": 1.0, "CONGESTED": 1.0, "RESTRICTED": 0.6, "DANGEROUS": 0.4}
 ACCESS = {"OPEN": 1.0, "CONGESTED": 0.7, "RESTRICTED": 0.5, "DANGEROUS": 0.25, "BLOCKED": 0.0}
 
 
 def build_graph(dataset: dict) -> nx.DiGraph:
+    """Directed road graph. A two-way road becomes two directed edges, a one-way road (`oneway: true`, direction
+    u -> v) just one. Speed, lanes and capacity come from the tags on the edge or its road class (road_classes.py)."""
     meta = dataset["meta"]
     frame = frame_of(dataset)
     G = nx.DiGraph(extent=max(frame.width_m, frame.height_m), frame=frame, width=frame.width_m, height=frame.height_m,
@@ -23,14 +24,15 @@ def build_graph(dataset: dict) -> nx.DiGraph:
     for n in dataset["nodes"]:
         G.add_node(n["id"], x=n["x"], y=n["y"], hazard=0.0, risk=0.0)
     for e in dataset["edges"]:
-        arterial = bool(e.get("arterial", False))
-        speed = ARTERIAL_SPEED if arterial else LOCAL_SPEED
-        for a, b in ((e["u"], e["v"]), (e["v"], e["u"])):
-            G.add_edge(a, b, distance=e["distance"], arterial=arterial, free_speed=speed,
-                       base_time=e["distance"] / speed, current_time=e["distance"] / speed,
-                       speed_vehicle=speed, speed_walk=WALK_SPEED, road_class=e.get("road_class"),
-                       capacity=PERSONS_PER_M[arterial] * e["distance"],
-                       hazard=0.0, risk=0.0, accessibility=1.0, congestion=0.0,
+        r = resolve_edge(e)
+        oneway = bool(e.get("oneway", False))
+        for a, b in (((e["u"], e["v"]),) if oneway else ((e["u"], e["v"]), (e["v"], e["u"]))):
+            G.add_edge(a, b, distance=e["distance"], arterial=r["arterial"], road_class=r["class"], lanes=r["lanes"],
+                       oneway=oneway, free_speed=r["speed_mps"], speed_limit_mps=r["speed_mps"],
+                       base_time=e["distance"] / r["speed_mps"], current_time=e["distance"] / r["speed_mps"],
+                       speed_vehicle=r["speed_mps"], speed_walk=WALK_SPEED,
+                       capacity=r["capacity_per_m"] * e["distance"],
+                       hazard=0.0, risk=0.0, exposure=0.0, accessibility=1.0, congestion=0.0,
                        status=RoadStatus.OPEN.value, forced_closed=False)
     return G
 

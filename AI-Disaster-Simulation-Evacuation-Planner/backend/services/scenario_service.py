@@ -13,8 +13,10 @@ from backend.services.session_store import STORE, SessionData
 from config.settings import CARTO_API_KEY, MAX_CUSTOM_SCENARIOS, RISK_LEVELS, ScenarioConfig
 from src.data.data_loader import dataset_info, load_dataset
 from src.data.schema import frame_of
-from src.disaster.hazard_model import DISASTER_PRESETS
-from src.graph.graph_utils import undirected_edges
+from src.disaster.hazard_model import DISASTER_PRESETS, area_scale
+from src.graph.graph_utils import road_edges, undirected_edges
+from src.graph.network_stats import summarize_network
+from src.graph.road_graph import build_graph
 from src.utils.helpers import graph_frame, node_latlon
 
 
@@ -41,6 +43,7 @@ PRESETS: dict[str, ScenarioConfig] = {c.id: c for c in [
             description="Expanding hazard + 10 road closures + shelter failure + tight capacity."),
 ]}
 
+SCALED = ("initial_radius_m", "max_radius_m", "spread_speed_mps")
 BLURBS = {"flood": "Water spreads outward and closes roads from the centre.",
           "wildfire": "A fast front: smaller area, steeper edge, spreads quickly.",
           "earthquake": "Instant, fixed damage zone. Nothing spreads afterwards."}
@@ -66,9 +69,10 @@ def _frame():
 def resolved(cfg: ScenarioConfig) -> dict:
     """Config with preset defaults filled in and the epicentre expressed as lat/lon (for the UI form)."""
     d, p, fr = cfg.to_dict(), DISASTER_PRESETS[cfg.disaster_type], _frame()
+    scale = area_scale(fr.width_m, fr.height_m)          # preset radii shrink on datasets smaller than the demo grid
     for k in ("initial_radius_m", "max_radius_m", "spread_speed_mps"):
         if d[k] is None:
-            d[k] = p[k]
+            d[k] = round(p[k] * scale, 3)
     d["center_lat"], d["center_lon"] = fr.to_latlon(cfg.center_x_frac * fr.width_m, cfg.center_y_frac * fr.height_m)
     return d
 
@@ -94,6 +98,19 @@ def dataset_info_for_api() -> dict:
     return dataset_info()
 
 
+_network_cache: dict[int, dict] = {}
+
+
+def network_summary() -> dict:
+    """Road network of the ACTIVE dataset: counts, km, lanes, speeds, one-way share, per road class. Cached per dataset."""
+    ds = load_dataset()
+    key = id(ds)                                   # load_dataset() returns the same cached object for the same file
+    if key not in _network_cache:
+        _network_cache.clear()
+        _network_cache[key] = {"dataset": ds["meta"].get("name", "unnamed"), **summarize_network(build_graph(ds))}
+    return _network_cache[key]
+
+
 def meta() -> dict:
     """Everything the UI needs to build its option controls (same for every user)."""
     ds, fr, info = load_dataset(), _frame(), dataset_info()
@@ -103,9 +120,18 @@ def meta() -> dict:
         "extent_m": max(fr.width_m, fr.height_m), "bounds": fr.bounds(),
         "base_population": sum(g["size"] for g in ds["population"]),
         "n_shelters_max": len(ds["shelters"]), "base_shelter_capacity": ds["shelters"][0]["capacity"],
-        "disaster_types": {k: {"label": k.title(), "blurb": BLURBS.get(k, ""), **v} for k, v in DISASTER_PRESETS.items()},
+        "disaster_types": {k: {"label": k.title(), "blurb": BLURBS.get(k, ""),
+                               **{kk: (round(vv * area_scale(fr.width_m, fr.height_m), 3) if kk in SCALED else vv) for kk, vv in v.items()}}
+                           for k, v in DISASTER_PRESETS.items()},
         "defaults": resolved(PRESETS["expanding"]),
     }
+
+
+def _road_layer(G, u: int, v: int) -> dict:
+    e = road_edges(G, u, v)[0]
+    return {"a": node_latlon(G, u), "b": node_latlon(G, v), "arterial": e["arterial"], "cls": e["road_class"],
+            "lanes": e["lanes"], "kph": round(e["speed_limit_mps"] * 3.6), "oneway": e["oneway"],
+            "rev": not G.has_edge(u, v)}                       # one-way roads run v -> u when rev is true
 
 
 def layers(sim) -> dict:
@@ -124,8 +150,7 @@ def layers(sim) -> dict:
         "scenario": sim.cfg.to_dict(),
         "risk_levels": {"medium": RISK_LEVELS.medium, "high": RISK_LEVELS.high, "critical": RISK_LEVELS.critical},
         "bounds": fr.bounds(),
-        "roads": [{"a": node_latlon(G, u), "b": node_latlon(G, v), "arterial": G[u][v]["arterial"]}
-                  for u, v in undirected_edges(G)],
+        "roads": [_road_layer(G, u, v) for u, v in undirected_edges(G)],
         "nodes": [node_latlon(G, n) for n in sorted(G.nodes)],
         "population": [{"latlon": node_latlon(G, n), "people": p, "ordered": n in ordered_nodes} for n, p in pop.items()],
     }

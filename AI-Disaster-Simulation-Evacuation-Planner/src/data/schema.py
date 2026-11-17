@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 import networkx as nx
 
 from src.utils.helpers import Frame, legacy_frame
-
+from src.graph.road_classes import CLASSES
 REQUIRED_KEYS = ("meta", "nodes", "edges", "population", "shelters")
 LAYERS = ("roads", "population", "shelters")
 SOURCES = ("synthetic", "real", "derived")
@@ -126,9 +126,11 @@ def validate_dataset(ds) -> ValidationReport:
             break                                               # one example is enough
 
     # edges
-    g = nx.Graph()
+    g = nx.Graph()                      # undirected: connectivity of the road geometry
+    dg = nx.DiGraph()                   # directed: what a vehicle may actually drive (one-way aware)
     g.add_nodes_from(node_ids)
-    bad_edges = 0
+    dg.add_nodes_from(node_ids)
+    bad_edges, unknown_classes = 0, set()
     for i, e in enumerate(ds["edges"] if isinstance(ds["edges"], list) else []):
         ok = isinstance(e, dict) and e.get("u") in node_ids and e.get("v") in node_ids and e.get("u") != e.get("v")
         if not ok:
@@ -141,12 +143,29 @@ def validate_dataset(ds) -> ValidationReport:
             continue
         if e["distance"] > 5000:
             r.warnings.append(f"edges[{i}] is {e['distance']:.0f} m long (check the road geometry)")
+        lanes, kph = e.get("lanes"), e.get("maxspeed_kph")
+        if lanes is not None and not (isinstance(lanes, int) and not isinstance(lanes, bool) and 1 <= lanes <= 12):
+            r.errors.append(f"edges[{i}] lanes must be an integer from 1 to 12")
+        if kph is not None and not (_num(kph) and 0 < kph <= 200):
+            r.errors.append(f"edges[{i}] maxspeed_kph must be a number in (0, 200]")
+        if "oneway" in e and not isinstance(e["oneway"], bool):
+            r.errors.append(f"edges[{i}] oneway must be true or false")
+        if e.get("road_class") is not None and e["road_class"] not in CLASSES:
+            unknown_classes.add(str(e["road_class"]))
         g.add_edge(e["u"], e["v"])
+        dg.add_edge(e["u"], e["v"])
+        if not e.get("oneway"):
+            dg.add_edge(e["v"], e["u"])
+
     if bad_edges > 3:
         r.errors.append(f"... {bad_edges} invalid edges in total")
     if not ds["edges"]:
         r.errors.append("edges must be a non-empty list")
 
+    if unknown_classes:
+        r.warnings.append(f"unknown road classes {sorted(unknown_classes)[:5]} are treated as 'local'; define them under "
+                          f"road_classes in config/simulation_config.yaml")
+        
     # connectivity
     comps = sorted(nx.connected_components(g), key=len, reverse=True) if node_ids else []
     main = comps[0] if comps else set()
@@ -197,6 +216,18 @@ def validate_dataset(ds) -> ValidationReport:
     if shelters and len(comps) > 1 and any(isinstance(s, dict) and s.get("node") not in main for s in shelters):
         r.warnings.append("some shelters sit outside the main road network")
 
+    # can anyone actually reach a shelter, following one-way directions?
+    if groups and shelters and not r.errors:
+        reach = set()
+        for sh in shelters:
+            reach |= nx.ancestors(dg, sh["node"]) | {sh["node"]}
+        stuck = [p for p in groups if p["node"] not in reach]
+        if len(stuck) == len(groups):
+            r.errors.append("no population group can reach any shelter by road (check one-way roads and connectivity)")
+        elif stuck:
+            r.warnings.append(f"{len(stuck)} of {len(groups)} population groups ({sum(p['size'] for p in stuck):,.0f} people) "
+                              f"cannot reach any shelter by road (one-way streets or disconnected roads)")
+            
     # soft checks
     if len(node_ids) > SLOW_NODE_COUNT:
         r.warnings.append(f"{len(node_ids)} nodes: simulation steps will be slow (routing is recomputed each step)")
@@ -207,7 +238,8 @@ def validate_dataset(ds) -> ValidationReport:
         r.warnings.append("no provenance recorded: treated as synthetic")
 
     r.stats = {"nodes": len(node_ids), "edges": len(ds["edges"]) if isinstance(ds["edges"], list) else 0,
-               "components": len(comps), "population_groups": len(groups), "population": pop_total,
+                              "oneway_roads": sum(1 for e in ds["edges"] if isinstance(e, dict) and e.get("oneway")) if isinstance(ds["edges"], list) else 0,
+                              "components": len(comps), "population_groups": len(groups), "population": pop_total,
                "shelters": len(shelters), "shelter_capacity": cap_total}
     return r
 

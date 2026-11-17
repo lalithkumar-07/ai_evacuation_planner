@@ -13,7 +13,8 @@ from backend.services import scenario_service as scen
 from backend.services.session_store import STORE, SessionData
 from config.settings import ANALYTICS_CACHE_SIZE, ScenarioConfig
 from src.disaster.risk_calculator import risk_level
-from src.graph.graph_utils import SEVERITY, undirected_edges
+from src.graph.graph_utils import SEVERITY, road_edges, undirected_edges
+from src.graph.network_stats import hotspots as _hotspots
 from src.simulation.metrics import summarize
 from src.simulation.simulation_engine import Simulation
 from src.utils.helpers import graph_frame, node_latlon, to_latlon
@@ -49,7 +50,7 @@ def state(sim: Simulation, paused: bool = False) -> dict:
     G, ext, d = sim.G, graph_frame(sim.G), sim.disaster
     roads = []
     for u, v in undirected_edges(G):
-        worst = max((G[u][v], G[v][u]), key=lambda e: SEVERITY.index(e["status"]))
+        worst = max(road_edges(G, u, v), key=lambda e: SEVERITY.index(e["status"]))
         roads.append([worst["status"], round(worst["risk"], 3)])
     return {
         "time_s": sim.t, "finished": sim.finished, "paused": paused, "strategy": sim.strategy.name,
@@ -146,6 +147,10 @@ def shelters(sid: str) -> list[dict]:
     with STORE.existing(sid) as s:
         return state(_require(s), s.paused)["shelters"]
 
+def hotspots(sid: str, by: str, limit: int) -> list[dict]:
+    """Roads with the most cumulative hazard exposure (or congestion / risk right now) in MY simulation."""
+    with STORE.existing(sid) as s:
+        return _hotspots(_require(s).G, by, limit)
 
 def plan(sid: str, lat: float | None, lon: float | None) -> dict:
     with STORE.existing(sid) as s:

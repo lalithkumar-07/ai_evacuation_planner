@@ -14,7 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.api import (disaster_routes, evacuation_routes, scenario_routes, session_routes,
+from backend.api import (disaster_routes, evacuation_routes,network_routes, scenario_routes, session_routes,
                          simulation_routes)
 from backend.services.scenario_service import NotFound
 from backend.services.session_store import InvalidSessionId
@@ -23,7 +23,7 @@ from config.settings import FRONTEND_DIR, configure_logging
 
 configure_logging()
 app = FastAPI(title="AI Disaster Simulation & Evacuation Planner (prototype, synthetic data)")
-for r in (scenario_routes, disaster_routes, evacuation_routes, simulation_routes, session_routes):
+for r in (scenario_routes, disaster_routes, evacuation_routes, simulation_routes, session_routes, network_routes):
     app.include_router(r.router)
 app.include_router(scenario_routes.meta_router)
 

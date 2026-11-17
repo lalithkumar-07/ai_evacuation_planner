@@ -85,7 +85,7 @@ RISK_THRESHOLDS = RiskThresholds(**_Y.get("risk_thresholds", {}))
 RISK_LEVELS = RiskLevels(**_Y.get("risk_levels", {}))
 SIM = SimParams(**_Y.get("simulation", {}))
 RISK_FUNCTION = _Y.get("risk_function", "weighted_sum")
-
+ROAD_CLASS_OVERRIDES = _Y.get("road_classes") or {}      # see src/graph/road_classes.py
 
 @dataclass
 class ScenarioConfig:

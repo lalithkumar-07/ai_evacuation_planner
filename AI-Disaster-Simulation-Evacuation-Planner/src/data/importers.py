@@ -17,10 +17,9 @@ from pathlib import Path
 import networkx as nx
 import numpy as np
 
+from src.graph.road_classes import CLASSES, NON_DRIVABLE, parse_lanes, parse_maxspeed_kph, parse_oneway
 from src.utils.helpers import M_PER_DEG_LAT, Frame
 
-ARTERIAL_CLASSES = {"motorway", "trunk", "primary", "secondary",
-                    "motorway_link", "trunk_link", "primary_link", "secondary_link"}
 POPULATION_COLUMNS = {"lat": ("lat", "latitude", "y"), "lon": ("lon", "lng", "long", "longitude", "x"),
                       "population": ("population", "pop", "people", "count")}
 SHELTER_COLUMNS = {"lat": ("lat", "latitude", "y"), "lon": ("lon", "lng", "long", "longitude", "x"),
@@ -30,11 +29,17 @@ SHELTER_COLUMNS = {"lat": ("lat", "latitude", "y"), "lon": ("lon", "lng", "long"
 
 # ---- roads ---------------------------------------------------------------------------------------------------
 def read_roads_geojson(path, snap_m: float = 1.0) -> dict:
-    """GeoJSON roads -> {nodes, edges, frame, stats}. Vertices closer than ``snap_m`` become one node, so roads
-    that share a coordinate (an intersection) are connected. Only the largest connected network is kept."""
+    """GeoJSON roads -> {nodes, edges, frame, stats}.
+
+    * Vertices closer than ``snap_m`` become one node, so roads that share a coordinate (an intersection) connect.
+    * Reads the OSM tags `highway` (road class), `maxspeed`, `lanes`, `oneway` and `junction`.
+    * Roads cars cannot use (footway, path, steps, ...) are skipped and counted. Unknown classes become `unclassified`.
+    * Only the largest STRONGLY connected network is kept, so every kept node can reach every other one
+      following one-way directions. The frame is computed from the part that is kept.
+    """
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     feats = data.get("features", []) if data.get("type") == "FeatureCollection" else [data]
-    lines, skipped, bad = [], {}, 0
+    lines, skipped, bad, non_drivable, unknown = [], {}, 0, {}, {}
     for f in feats:
         geom, props = f.get("geometry") or {}, f.get("properties") or {}
         kind, coords = geom.get("type"), geom.get("coordinates")
@@ -42,15 +47,25 @@ def read_roads_geojson(path, snap_m: float = 1.0) -> dict:
         if parts is None:
             skipped[str(kind)] = skipped.get(str(kind), 0) + 1
             continue
+        hw = props.get("highway")
+        if hw in NON_DRIVABLE:
+            non_drivable[hw] = non_drivable.get(hw, 0) + 1
+            continue
+        if hw is not None and hw not in CLASSES:
+            unknown[str(hw)] = unknown.get(str(hw), 0) + 1
+            hw = "unclassified"
+        attrs = {"road_class": hw, "arterial": CLASSES[hw].arterial if hw else False,
+                 "maxspeed_kph": parse_maxspeed_kph(props.get("maxspeed")), "lanes": parse_lanes(props.get("lanes")),
+                 "oneway": parse_oneway(props.get("oneway"), props.get("junction"))}
         for part in parts:
             pts = [(float(c[0]), float(c[1])) for c in part
                    if isinstance(c, (list, tuple)) and len(c) >= 2 and all(math.isfinite(float(v)) for v in c[:2])]
             if len(pts) >= 2:
-                lines.append((pts, props.get("highway")))
+                lines.append((pts, attrs))
             else:
                 bad += 1
     if not lines:
-        raise ValueError("No usable LineString features found in the roads file")
+        raise ValueError("No usable drivable LineString features found in the roads file")
 
     lons = [p[0] for pts, _ in lines for p in pts]
     lats = [p[1] for pts, _ in lines for p in pts]
@@ -62,7 +77,7 @@ def read_roads_geojson(path, snap_m: float = 1.0) -> dict:
         raise ValueError("Road coordinates cover no area (all on one line or point)")
 
     key_to_id, xy, ll, edges = {}, [], [], {}
-    for pts, hw in lines:
+    for pts, a in lines:
         prev = None
         for lon, lat in pts:
             x, y = frame.from_latlon(lat, lon)
@@ -73,18 +88,23 @@ def read_roads_geojson(path, snap_m: float = 1.0) -> dict:
                 ll.append((lon, lat))
             nid = key_to_id[key]
             if prev is not None and prev != nid:
-                a, b = (prev, nid) if prev < nid else (nid, prev)
-                art = hw in ARTERIAL_CLASSES
-                if (a, b) in edges:
-                    edges[(a, b)]["arterial"] = edges[(a, b)]["arterial"] or art
-                else:
-                    edges[(a, b)] = {"arterial": art, "road_class": hw}
+                if a["oneway"] == 0:
+                    ek = (min(prev, nid), max(prev, nid), False)
+                else:                                              # one-way: store as u -> v (flip if tagged -1)
+                    ek = (prev, nid, True) if a["oneway"] == 1 else (nid, prev, True)
+                rec = edges.setdefault(ek, {"arterial": False, "road_class": None, "maxspeed_kph": None, "lanes": None})
+                rec["arterial"] = rec["arterial"] or a["arterial"]
+                for k in ("road_class", "maxspeed_kph", "lanes"):
+                    rec[k] = rec[k] if rec[k] is not None else a[k]
             prev = nid
 
-    g = nx.Graph()
-    g.add_nodes_from(range(len(xy)))
-    g.add_edges_from(edges)
-    main = max(nx.connected_components(g), key=len)
+    dg = nx.DiGraph()
+    dg.add_nodes_from(range(len(xy)))
+    for (a, b, ow) in edges:
+        dg.add_edge(a, b)
+        if not ow:
+            dg.add_edge(b, a)
+    main = max(nx.strongly_connected_components(dg), key=len)
     order = sorted(main)
     new_id = {old: i for i, old in enumerate(order)}
 
@@ -99,15 +119,29 @@ def read_roads_geojson(path, snap_m: float = 1.0) -> dict:
         raise ValueError("The connected road network covers no area")
     pos = {o: frame.from_latlon(ll[o][1], ll[o][0]) for o in order}
     nodes = [{"id": new_id[o], "x": round(pos[o][0], 2), "y": round(pos[o][1], 2)} for o in order]
-    out_edges = [{"u": new_id[a], "v": new_id[b],
-                  "distance": round(max(math.hypot(pos[a][0] - pos[b][0], pos[a][1] - pos[b][1]), 0.01), 2),
-                  "arterial": e["arterial"], "road_class": e["road_class"]}
-                 for (a, b), e in sorted(edges.items()) if a in main and b in main]
+    out_edges, by_class, tagged_speed, tagged_lanes = [], {}, 0, 0
+    for (a, b, ow), rec in sorted(edges.items()):
+        if a not in main or b not in main:
+            continue
+        e = {"u": new_id[a], "v": new_id[b],
+             "distance": round(max(math.hypot(pos[a][0] - pos[b][0], pos[a][1] - pos[b][1]), 0.01), 2),
+             "arterial": rec["arterial"], "road_class": rec["road_class"]}
+        if rec["maxspeed_kph"] is not None:
+            e["maxspeed_kph"] = rec["maxspeed_kph"]; tagged_speed += 1
+        if rec["lanes"] is not None:
+            e["lanes"] = rec["lanes"]; tagged_lanes += 1
+        if ow:
+            e["oneway"] = True
+        out_edges.append(e)
+        cls = rec["road_class"] or ("arterial" if rec["arterial"] else "local")
+        by_class[cls] = by_class.get(cls, 0) + 1
     return {"nodes": nodes, "edges": out_edges, "frame": frame,
             "stats": {"features": len(feats), "lines": len(lines), "nodes_before_cleanup": len(xy),
                       "edges_before_cleanup": len(edges), "nodes_dropped_disconnected": len(xy) - len(main),
-                      "skipped_geometries": skipped, "unusable_lines": bad}}
-
+                      "skipped_geometries": skipped, "unusable_lines": bad,
+                      "non_drivable_skipped": non_drivable, "unknown_road_classes": unknown,
+                      "roads_by_class": dict(sorted(by_class.items())), "oneway_roads": sum(1 for e in out_edges if e.get("oneway")),
+                      "roads_with_tagged_speed": tagged_speed, "roads_with_tagged_lanes": tagged_lanes}}
 
 # ---- CSV -------------------------------------------------------------------------------------------------------
 def read_csv_rows(path, columns: dict, required: tuple) -> tuple[list[dict], dict]:

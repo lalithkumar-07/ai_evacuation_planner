@@ -112,11 +112,15 @@ class Simulation:
     def _accumulate_exposure(self) -> None:
         dt = self.cfg.dt_s
         for a in self.agents:
-            h = self._local(a)["hazard"]
+            loc=self._local(a)
+            h = loc["hazard"]
             a.risk_exposure += h * dt
             self.exposure_person_s += h * dt * a.size
             if h >= RISK_THRESHOLDS.restricted:
                 self.person_s_in_hazard += dt * a.size
+        # Accumulate hazard exposure on individual road edges.
+        for u, v, e in self.G.edges(data=True):
+            e["exposure"] += e["hazard"] * dt
 
     def _recompute_loads(self) -> None:
         self.loads = {}
@@ -149,7 +153,7 @@ class Simulation:
             "at_risk": at_risk,
             "peak_risk": round(peak_risk, 3), "risk_level": risk_level(peak_risk),
             "exposure": self.exposure_person_s,
-            "blocked_roads": sum(1 for u, v, e in self.G.edges(data=True) if u < v and e["status"] == "BLOCKED"),
+            "blocked_roads": len({(min(u,v), max(u,v)) for u, v, e in self.G.edges(data=True) if e["status"] == "BLOCKED"}),
             "congestion_mean": sum(ratios) / len(ratios) if ratios else 0.0,
             "congestion_peak": max(ratios) if ratios else 0.0,
             "shelters_active": sum(1 for s in self.shelters if s.status == ShelterStatus.ACTIVE),

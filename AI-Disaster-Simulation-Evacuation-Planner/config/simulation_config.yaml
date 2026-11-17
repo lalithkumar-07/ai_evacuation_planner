@@ -25,3 +25,10 @@ risk_levels:               # risk score -> label
   critical: 0.75
 
 risk_function: weighted_sum
+
+# Road classes (Phase 4). Only list what you want to CHANGE; defaults live in src/graph/road_classes.py.
+# These are generic assumptions, not measurements. Speed: speed_kph (or speed_mps). lanes = lanes PER DIRECTION.
+# capacity_per_lane_m = people that fit on one lane per metre. A speed limit / lane count tagged on a road wins.
+road_classes: {}
+#  primary:     {speed_kph: 45, lanes: 2, capacity_per_lane_m: 0.25, arterial: true}
+#  residential: {speed_kph: 20}

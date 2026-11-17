@@ -36,3 +36,8 @@ def path_stats(G: nx.DiGraph, path: list[int]) -> dict:
         "hazardous_roads": sum(e["status"] in ("RESTRICTED", "DANGEROUS", "BLOCKED") for e in edges),
         "blocked_roads": sum(e["status"] == "BLOCKED" for e in edges),
     }
+
+
+def road_edges(G: nx.DiGraph, u: int, v: int) -> list[dict]:
+    """The directed edges that exist between u and v: one for a one-way road, two for a two-way road."""
+    return [G[a][b] for a, b in ((u, v), (v, u)) if G.has_edge(a, b)]

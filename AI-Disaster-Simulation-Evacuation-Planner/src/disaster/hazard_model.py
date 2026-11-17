@@ -29,6 +29,12 @@ class Disaster:
     falloff: float
     start_time: float = 0.0
 
+    def state_key(self, t: float) -> float:
+        """Everything about time t that hazard_at depends on. If it is unchanged between two steps the hazard field
+        is identical, so the manager can skip recomputing it. A disaster whose hazard depends on t in any other
+        way must override this (return a value that changes whenever the field changes)."""
+        return self.radius(t)
+
     def radius(self, t: float) -> float:
         if t < self.start_time:
             return 0.0
@@ -42,11 +48,20 @@ class Disaster:
         return self.intensity * (1.0 - d / r) ** self.falloff
 
 
-def make_disaster(cfg: ScenarioConfig, center: tuple[float, float]) -> Disaster | None:
+DEMO_EXTENT_M = 6000.0     # the preset radii were sized for the 6 km demo grid
+
+
+def area_scale(width_m: float, height_m: float) -> float:
+    """Shrink the PRESET radii and spread speed on datasets smaller than the demo grid (never enlarge them).
+    Values the user sets explicitly are never scaled."""
+    return max(0.15, min(1.0, max(width_m, height_m) / DEMO_EXTENT_M))
+
+
+def make_disaster(cfg: ScenarioConfig, center: tuple[float, float], area_scale: float = 1.0) -> Disaster | None:
     if not cfg.disaster_enabled:
         return None
     p = DISASTER_PRESETS[cfg.disaster_type]
-    pick = lambda v, k: p[k] if v is None else v
+    pick = lambda v, k: p[k] * area_scale if v is None else v
     return Disaster(cfg.disaster_type, center[0], center[1], cfg.intensity,
                     pick(cfg.initial_radius_m, "initial_radius_m"), pick(cfg.max_radius_m, "max_radius_m"),
                     pick(cfg.spread_speed_mps, "spread_speed_mps"), p["falloff"])

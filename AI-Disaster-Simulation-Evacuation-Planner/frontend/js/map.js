@@ -112,9 +112,10 @@ const MapView = (() => {
     roads = []; nodes = []; dots = []; shelterMarks = []; hazardRings = []; routeLines = {}; originMark = null;
     levels = layers.risk_levels; setBounds(layers.bounds);
     roads = layers.roads.map(r => {
-      const l = L.polyline([r.a, r.b], {weight: r.arterial ? 3.5 : 1.8, color: ROAD.OPEN, opacity: .75}).addTo(groups.roads);
+        const l = L.polyline([r.a, r.b], {weight: r.arterial ? 3.5 : 1.8, color: ROAD.OPEN, opacity: .75}).addTo(groups.roads);
       l._s = 'OPEN'; l._r = 0;
-      l.bindTooltip(() => `Road · ${l._s.toLowerCase()} · risk ${l._r.toFixed(2)}`, {sticky: true});
+      const info = r.cls ? `${r.cls.replace('_', ' ')} · ${r.lanes} lane${r.lanes > 1 ? 's' : ''}/direction · ${r.kph} km/h${r.oneway ? ' · one-way' : ''}` : 'road';
+      l.bindTooltip(() => `${info}<br>${l._s.toLowerCase()} · risk ${l._r.toFixed(2)}`, {sticky: true});
       return l;
     });
     nodes = layers.nodes.map(p => L.circleMarker(p, {radius: 7, weight: 0, fillOpacity: 0, fillColor: RISK[0], interactive: false}).addTo(groups.risk));
@@ -178,10 +179,10 @@ const MapView = (() => {
     groups.routes.clearLayers(); routeLines = {};
     originMark = L.marker(plan.origin.latlon, {icon: L.divIcon({className: 'origin', html: '<i></i>', iconSize: [18, 18], iconAnchor: [9, 18]}), title: 'Evacuation origin', interactive: false}).addTo(groups.routes);
     const all = [plan.origin.latlon];
-    if (plan.baseline) { routeLines.baseline = [L.polyline(plan.baseline.path, {color: cssVar('--route-base'), weight: 5, dashArray: '9 8', opacity: .95}).addTo(groups.routes)]; all.push(...plan.baseline.path); }
+    if (plan.baseline) { routeLines.baseline = [L.polyline(plan.baseline.path, {color: cssVar('--route-base'), weight: 5, dashArray: '9 8', opacity: .95, interactive:false}).addTo(groups.routes)]; all.push(...plan.baseline.path); }
     if (plan.proposed) {
-      routeLines.proposed = [L.polyline(plan.proposed.path, {color: '#fff', weight: 10, opacity: .85}).addTo(groups.routes),
-                             L.polyline(plan.proposed.path, {color: cssVar('--route-new'), weight: 6, opacity: 1}).addTo(groups.routes)];
+      routeLines.proposed = [L.polyline(plan.proposed.path, {color: '#fff', weight: 10, opacity: .85, interactive:false}).addTo(groups.routes),
+                             L.polyline(plan.proposed.path, {color: cssVar('--route-new'), weight: 6, opacity: 1, interactive:false}).addTo(groups.routes)];
       all.push(...plan.proposed.path);
     }
     if (fit && all.length > 1) map.fitBounds(L.latLngBounds(all).pad(.25), {maxZoom: 16});
