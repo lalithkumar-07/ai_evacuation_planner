@@ -6,6 +6,7 @@
   async function show() {
     try {
       const d = await API.get('/dataset');
+      if (typeof Pages !== 'undefined') Pages.setDataset(d);
       const pill = document.querySelector('.topbar .pill');
       if (pill) {
         const layers = Object.entries(d.layers).map(([k, v]) => `${k}: ${v.source}${v.origin ? ' (' + v.origin + ')' : ''}`).join(' · ');
@@ -16,7 +17,10 @@
       if (typeof MapView !== 'undefined' && MapView.setOverlayNote) {      // top-level const is not on window
         MapView.setOverlayNote(d.kind === 'synthetic' ? 'overlays: synthetic data' : `data: ${d.name} (${d.kind})`);
       }
-    } catch (e) { /* the pill keeps its default text */ }
+    } catch (e) {
+      const detail = $('datasetDetail');
+      if (detail) detail.textContent = 'Could not retrieve dataset provenance: ' + e.message;
+    }
   }
   document.addEventListener('DOMContentLoaded', show);
 })();

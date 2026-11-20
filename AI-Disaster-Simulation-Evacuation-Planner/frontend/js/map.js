@@ -41,7 +41,8 @@ const MapView = (() => {
       '<b>Routes</b><div><span class="ln" style="border-color:var(--route-base);border-top-style:dashed"></span>baseline <span class="ln" style="border-color:var(--route-new)"></span>proposed</div>' +
       '<b>Evacuees</b><div>' + ['TRAVELING', 'REROUTING', 'WAITING', 'TRAPPED', 'AT_SHELTER'].map(k => `<span class="sw" style="background:${AGENT[k]}"></span>${k.toLowerCase().replace('_', ' ')} `).join('') + '</div>';
 
-    map.on('click', e => { if (pick) { placeEpicentre(e.latlng, true); setPick(false); } else h.onOrigin(e.latlng); });
+    map.on('click', e => { if (pick) { placeEpicentre(e.latlng, true); setPick(false); }
+      else if (document.body.dataset.page === 'evacuation') h.onOrigin(e.latlng); });
     new ResizeObserver(() => map.invalidateSize()).observe($('map'));
   }
 
@@ -168,6 +169,7 @@ const MapView = (() => {
       epi.on('drag', () => { const p = clamp(epi.getLatLng()); preview.forEach(r => r.setLatLng(p)); h.onEpicentre(p, false); });
       epi.on('dragend', () => { const p = clamp(epi.getLatLng()); epi.setLatLng(p); preview.forEach(r => r.setLatLng(p)); h.onEpicentre(p, true); });
     } else epi.setLatLng(c);
+    if (document.body.dataset.page !== 'disaster' && epi && map.hasLayer(epi)) map.removeLayer(epi);
     preview = [L.circle(c, {radius: r0, color: '#cf2f2f', weight: 1.5, dashArray: '2 5', fill: false, interactive: false}).addTo(groups.preview),
                L.circle(c, {radius: rmax, color: '#cf2f2f', weight: 1.5, dashArray: '8 8', opacity: .6, fill: false, interactive: false}).addTo(groups.preview)];
   }
@@ -192,8 +194,37 @@ const MapView = (() => {
     if (which && routeLines[which]) routeLines[which].forEach(l => l.bringToFront());
   }
 
+  /* Each page has a useful default layer profile. All profiles use the same Leaflet
+     instance so route overlays, map state and event handlers are never duplicated. */
+  const PROFILES = {
+    disaster: ['hazard', 'risk', 'population', 'roads', 'shelters'],
+    roads: ['hazard', 'risk', 'roads', 'shelters'],
+    evacuation: ['hazard', 'roads', 'population', 'shelters', 'agents', 'routes'],
+  };
+  function setProfile(page) {
+    if (!map || !PROFILES[page]) return;
+    const visible = new Set(PROFILES[page]);
+    LAYERS.forEach(([key], i) => {
+      const show = visible.has(key);
+      if (show && !map.hasLayer(groups[key])) groups[key].addTo(map);
+      if (!show && map.hasLayer(groups[key])) map.removeLayer(groups[key]);
+      $('layerChips').children[i].setAttribute('aria-pressed', String(show));
+    });
+    if (page === 'disaster') {
+      if (!map.hasLayer(groups.preview)) groups.preview.addTo(map);
+      if (epi && !map.hasLayer(epi)) epi.addTo(map);
+    } else {
+      if (map.hasLayer(groups.preview)) map.removeLayer(groups.preview);
+      if (epi && map.hasLayer(epi)) map.removeLayer(epi);
+      setPick(false);
+    }
+  }
+  function focusRoad(a, b) {
+    if (map && a && b) map.fitBounds(L.latLngBounds([a, b]).pad(.8), {maxZoom: 17});
+  }
+
   return {
-    init, drawStatic, render, setBounds, fitAll, setPreview, placeEpicentre, setPick, drawRoutes, highlight,
+    init, drawStatic, render, setBounds, fitAll, setPreview, placeEpicentre, setPick, drawRoutes, highlight, setProfile, focusRoad,
     isPicking: () => pick,
     flyTo: (ll, z = 15) => map.flyTo(ll, z, {duration: .6}),
     openShelter: id => { const m = shelterMarks[id]; if (m) { map.flyTo(m.getLatLng(), Math.max(map.getZoom(), 15), {duration: .6}); m.openPopup(); } },

@@ -46,6 +46,7 @@ const Charts = (() => {
     push(m) { if (series.length && series.at(-1).t === m.t) return; series.push(m); refresh(); },
     setMode(v) { mode = v; build(); },
     restyle() { theme(); build(); if (cmp) drawComparison(cmpData); },
+    resize() { if (live) live.resize(); if (cmp) cmp.resize(); },
     setCmpMode(v) { cmpMode = v; if (cmpData) drawComparison(cmpData); },
     drawComparison,
   };

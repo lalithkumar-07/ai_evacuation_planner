@@ -1,18 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
+<!DOCTYPE html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Evacuation Planner · prototype</title>
+<title>Evacuation Planner · Disaster Response Workspace</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%230d2230'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%237cc7e8' stroke-width='2.5'/%3E%3Cpath d='M16 16l9-9M20 7h5v5' fill='none' stroke='%23ffc93c' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/dashboard.css">
+<link rel="stylesheet" href="css/pages.css">
 </head>
-<body data-view="map" data-theme="light">
-
+<body data-page="dashboard" data-theme="light">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></symbol>
   <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></symbol>
@@ -30,46 +32,38 @@
   <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14"/></symbol>
   <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V4M4 20h16M8 16l4-5 3 3 5-7"/></symbol>
 </defs></svg>
-
-<header class="topbar">
-  <div class="brand">
-    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" class="l1"/><circle cx="16" cy="16" r="8" class="l2"/><path d="M16 16l9-9M20 7h5v5" class="l3"/></svg>
-    <div><h1>Evacuation Planner</h1><p>Decision-support prototype</p></div>
-  </div>
-  <span class="pill warn" title="All roads, people and shelters are generated for this demo">Synthetic data</span>
-  <div class="spacer"></div>
-  <button class="icon-btn" id="bTheme" aria-label="Switch light or dark theme" title="Theme"><svg class="ic"><use id="themeIcon" href="#i-moon"/></svg></button>
-  <button class="icon-btn" id="bHelp" aria-label="Keyboard shortcuts" title="Shortcuts (?)"><svg class="ic"><use href="#i-help"/></svg></button>
-</header>
-
-<div id="apiError" class="alert hidden" role="alert">
-  <span id="apiErrorText">Cannot reach the planner backend.</span>
-  <button id="bRetry" class="btn sm">Retry</button>
-</div>
-
-<div class="shell">
-  <!-- ============ left: scenario options ============ -->
-  <aside class="side left" id="viewScenario" aria-label="Scenario options">
-    <div class="side-scroll" id="scenarioForm"><div class="skeleton" style="height:14rem"></div></div>
-    <footer class="side-foot">
-      <label class="switch"><input type="checkbox" id="autoUpdate" checked><span></span>Update map as I change options</label>
-      <div class="row">
-        <button class="btn primary grow" id="bGenerate" disabled>Generate</button>
-        <button class="btn" id="bApplyLive" disabled title="Change intensity, spread and size of the running disaster without restarting">Apply live</button>
-      </div>
-    </footer>
+<div class="app-frame">
+  <div id="navBackdrop" class="nav-backdrop" hidden></div>
+  <aside id="navRail" class="nav-rail" aria-label="Main application navigation">
+    <div class="rail-brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" class="l1"/><circle cx="16" cy="16" r="8" class="l2"/><path d="M16 16l9-9M20 7h5v5" class="l3"/></svg>
+      <div><strong>Evacuation Planner</strong><span>Disaster decision support</span></div>
+      <button id="bCloseNav" class="icon-btn close-nav" aria-label="Close navigation"><svg class="ic"><use href="#i-close"/></svg></button>
+    </div>
+    <div class="nav-section-label">WORKSPACE</div>
+    <nav class="primary-nav" aria-label="Pages">
+      <a href="#/dashboard" data-page-link="dashboard" aria-current="page"><svg class="ic"><use href="#i-chart"/></svg><span>Dashboard</span></a>
+      <a href="#/disaster" data-page-link="disaster"><svg class="ic"><use href="#i-flood"/></svg><span>Disaster &amp; Risk Monitoring</span></a>
+      <a href="#/roads" data-page-link="roads"><svg class="ic"><use href="#i-map"/></svg><span>Road Network &amp; Traffic</span></a>
+      <a href="#/evacuation" data-page-link="evacuation"><svg class="ic"><use href="#i-target"/></svg><span>Evacuation Management</span></a>
+      <a href="#/analytics" data-page-link="analytics"><svg class="ic"><use href="#i-chart"/></svg><span>Analytics &amp; Data Sources</span></a>
+    </nav>
+    <div class="nav-footer"><div class="status-dot"></div><div><b>Simulation workspace</b><small>Same session across all five views</small></div></div>
   </aside>
 
-  <!-- ============ centre: map ============ -->
-  <section class="stage" id="viewMap" aria-label="Map">
-    <div id="map" role="application" aria-label="Interactive evacuation map"></div>
-
-    <div class="map-tools" id="layerChips" role="group" aria-label="Map layers"></div>
-    <div class="pick-hint hidden" id="pickHint"><svg class="ic"><use href="#i-target"/></svg> Click the map to place the epicentre <kbd>Esc</kbd> cancel</div>
-    <button class="btn sm legend-btn" id="bLegend" aria-expanded="false">Legend</button>
-    <div class="legend hidden" id="legend"></div>
-
-    <div class="playbar" role="group" aria-label="Simulation controls">
+  <div class="workspace">
+    <header class="topbar">
+      <button class="icon-btn menu-toggle" id="bMenu" aria-label="Open navigation" aria-controls="navRail" aria-expanded="false"><svg class="ic"><use href="#i-map"/></svg></button>
+      <div class="page-title-wrap"><h1 id="pageTitle">Dashboard</h1><p id="pageSubtitle">Overview of the active evacuation scenario</p></div>
+      <div class="spacer"></div>
+      <span class="pill warn" id="datasetPill" title="Dataset provenance is loading">Synthetic data</span>
+      <button class="icon-btn" id="bTheme" aria-label="Switch light or dark theme" title="Theme"><svg class="ic"><use id="themeIcon" href="#i-moon"/></svg></button>
+      <button class="icon-btn" id="bHelp" aria-label="Keyboard shortcuts" title="Shortcuts (?)"><svg class="ic"><use href="#i-help"/></svg></button>
+    </header>
+    <div id="apiError" class="alert hidden" role="alert"><span id="apiErrorText">Cannot reach the planner backend.</span><button id="bRetry" class="btn sm">Retry</button></div>
+    <div class="sim-ribbon">
+      <div class="sim-label"><span class="live-dot"></span><b id="simRibbonStatus">Scenario loading</b><span class="muted" id="simRibbonDisaster">—</span></div>
+<div class="playbar" role="group" aria-label="Simulation controls">
       <button class="round" id="bReset" aria-label="Reset" title="Reset (R)" disabled><svg class="ic"><use href="#i-reset"/></svg></button>
       <button class="round big" id="bPlay" aria-label="Play" title="Play / pause (Space)" disabled><svg class="ic solid"><use id="playIcon" href="#i-play"/></svg></button>
       <button class="round" id="bStep" aria-label="Step 30 seconds" title="Step (→)" disabled><svg class="ic solid"><use href="#i-step"/></svg></button>
@@ -81,90 +75,103 @@
       <div class="clock"><b id="clock">00:00</b><span id="clockOf">of 03:00</span>
         <div class="track"><i id="trackFill"></i></div></div>
     </div>
-  </section>
-
-  <!-- ============ right: insights ============ -->
-  <aside class="side right" id="viewInsights" aria-label="Insights">
-    <div class="tabs" role="tablist">
-      <button role="tab" data-tab="live" aria-selected="true">Live</button>
-      <button role="tab" data-tab="routes" aria-selected="false">Routes</button>
-      <button role="tab" data-tab="compare" aria-selected="false">Compare</button>
     </div>
-    <div class="side-scroll">
-      <!-- LIVE -->
-      <section class="pane" id="tab-live">
-        <div class="hero">
-          <svg class="ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="ring-bg" cx="60" cy="60" r="52"/><circle class="ring-fg" id="ringFg" cx="60" cy="60" r="52" transform="rotate(-90 60 60)"/></svg>
-          <div class="hero-text">
-            <b id="hPct">0%</b>
-            <span><b id="hEvac">0</b> of <b id="hOrdered">0</b> evacuated</span>
-            <span class="badge LOW" id="riskBadge" title="The highest risk any not-yet-sheltered evacuee is exposed to right now">Risk low</span>
+
+    <main id="pageContainer" class="page-container">
+      <!-- 1: Dashboard -->
+      <section class="page" id="page-dashboard" aria-labelledby="dashHeading">
+        <div class="page-heading"><div><p class="eyebrow">COMMAND OVERVIEW</p><h2 id="dashHeading">Situation overview</h2><p>Live population, response capacity and evacuation progress.</p></div><a class="btn primary" href="#/disaster">Configure disaster</a></div>
+        <div class="dashboard-layout">
+          <div class="panel progress-panel">
+            <div class="panel-title"><h3>Evacuation progress</h3><span class="badge LOW" id="riskBadge">Risk low</span></div>
+            <div class="hero">
+              <svg class="ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="ring-bg" cx="60" cy="60" r="52"/><circle class="ring-fg" id="ringFg" cx="60" cy="60" r="52" transform="rotate(-90 60 60)"/></svg>
+              <div class="hero-text"><b id="hPct">0%</b><span><b id="hEvac">0</b> of <b id="hOrdered">0</b> evacuated</span><span class="muted small">Share of people ordered to evacuate</span></div>
+            </div>
+          </div>
+          <div class="panel status-panel"><div class="panel-title"><h3>Disaster status</h3><span class="info-tag">Live scenario</span></div>
+            <dl class="status-list"><div><dt>Disaster</dt><dd id="dashDisaster">—</dd></div><div><dt>Current radius</dt><dd id="dashRadius">—</dd></div><div><dt>Simulation time</dt><dd id="dashTime">00:00</dd></div><div><dt>Strategy</dt><dd id="dashStrategy">—</dd></div></dl>
           </div>
         </div>
-        <dl class="kpis">
-          <div><dt>Population</dt><dd id="kTotal">0</dd></div>
-          <div><dt>Affected</dt><dd id="kAffected">0</dd></div>
-          <div><dt>At risk now</dt><dd id="kAtRisk" class="hot">0</dd></div>
-          <div><dt>Remaining</dt><dd id="kRem">0</dd></div>
-          <div><dt>Blocked roads</dt><dd id="kBlock">0</dd></div>
-          <div><dt>Reroutes</dt><dd id="kRer">0</dd></div>
-          <div><dt>Shelters active</dt><dd id="kShel">0</dd></div>
-          <div><dt>Space left</dt><dd id="kCap">0</dd></div>
-        </dl>
-        <div class="chart-head"><h3>Trends</h3>
-          <div class="seg tight" id="chartMode" role="radiogroup" aria-label="Chart">
-            <button role="radio" data-v="evac" aria-checked="true">People</button><button role="radio" data-v="cong" aria-checked="false">Traffic</button><button role="radio" data-v="expo" aria-checked="false">Exposure</button>
-          </div></div>
-        <div class="chart-box"><canvas id="liveChart"></canvas></div>
-        <h3>Shelters</h3><ul id="shelterList" class="shelters"></ul>
-        <h3>Event log</h3><ol id="eventLog" class="events"><li class="muted">Events appear as the evacuation runs.</li></ol>
-      </section>
-
-      <!-- ROUTES -->
-      <section class="pane hidden" id="tab-routes">
-        <p class="muted">Click anywhere on the map to choose where people start. Both routes use today’s hazard and traffic.</p>
-        <div id="routeCards" class="route-cards"><div class="skeleton" style="height:9rem"></div></div>
-        <div class="row"><button class="btn" id="bRecalc" disabled>Recompute</button><button class="btn" id="bReroute" disabled title="Ask every active evacuee to re-plan at the next junction">Reroute everyone</button></div>
-      </section>
-
-      <!-- COMPARE -->
-      <section class="pane hidden" id="tab-compare">
-        <p class="muted">Runs the whole evacuation twice on identical inputs: nearest-shelter baseline and risk-aware proposed.</p>
-        <button class="btn primary" id="bCompare" disabled>Run full comparison</button>
-        <div id="cmpOut" class="hidden">
-          <p id="cmpSummary" class="summary"></p>
-          <div class="table-wrap"><table id="cmpTable"></table></div>
-          <div class="chart-head"><h3>Curves</h3>
-            <div class="seg tight" id="cmpMode" role="radiogroup" aria-label="Comparison chart">
-              <button role="radio" data-v="evac" aria-checked="true">Evacuated</button><button role="radio" data-v="expo" aria-checked="false">Exposure</button>
-            </div></div>
-          <div class="chart-box"><canvas id="cmpChart"></canvas></div>
-          <p class="muted small">* Trip times count only people who reached a shelter. Synthetic scenario: results describe this simulation, not a real disaster.</p>
+        <div class="panel"><div class="panel-title"><h3>Live response indicators</h3><span class="muted small">From current simulation state</span></div>
+          <dl class="kpis overview-kpis"><div><dt>Total population</dt><dd id="kTotal">0</dd></div><div><dt>Affected population</dt><dd id="kAffected">0</dd></div><div><dt>At risk now</dt><dd id="kAtRisk" class="hot">0</dd></div><div><dt>Remaining to evacuate</dt><dd id="kRem">0</dd></div><div><dt>Blocked roads</dt><dd id="kBlock">0</dd></div><div><dt>Reroutes</dt><dd id="kRer">0</dd></div><div><dt>Active shelters</dt><dd id="kShel">0</dd></div><div><dt>Available shelter capacity</dt><dd id="kCap">0</dd></div></dl>
+        </div>
+        <div class="two-panels">
+          <section class="panel"><div class="chart-head"><h3>Evacuation trends</h3><div class="seg tight" id="chartMode" role="radiogroup" aria-label="Trend chart"><button role="radio" data-v="evac" aria-checked="true">People</button><button role="radio" data-v="cong" aria-checked="false">Traffic</button><button role="radio" data-v="expo" aria-checked="false">Exposure</button></div></div><div class="chart-box large-chart"><canvas id="liveChart"></canvas></div></section>
+          <section class="panel"><div class="panel-title"><h3>Alerts &amp; event log</h3><span class="muted small">Latest first</span></div><ol id="eventLog" class="events"><li class="muted">Events appear as the evacuation runs.</li></ol></section>
         </div>
       </section>
-    </div>
+
+      <!-- 2: Disaster and Risk -->
+      <section class="page hidden" id="page-disaster" aria-labelledby="disasterHeading">
+        <div class="page-heading"><div><p class="eyebrow">HAZARD INTELLIGENCE</p><h2 id="disasterHeading">Disaster &amp; Risk Monitoring</h2><p>Inspect evolving hazard zones and configure the active disaster.</p></div></div>
+        <div class="feature-grid">
+          <div class="feature-main">
+            <div class="panel map-panel"><div class="panel-title"><h3>Disaster intensity &amp; risk map</h3><span class="muted small">Use layers to inspect the hazard, risk and population</span></div><div class="map-slot" id="mapSlotDisaster"></div></div>
+            <div class="panel"><div class="panel-title"><h3>Hazard conditions</h3><span class="muted small">Current scenario</span></div><dl class="detail-grid"><div><dt>Disaster type</dt><dd id="disasterType">—</dd></div><div><dt>Epicentre</dt><dd id="disasterCenter">—</dd></div><div><dt>Intensity</dt><dd id="disasterIntensity">—</dd></div><div><dt>Affected radius</dt><dd id="disasterRadius">—</dd></div><div><dt>Affected people</dt><dd id="riskAffected">0</dd></div><div><dt>Currently at risk</dt><dd id="riskAtRisk">0</dd></div></dl></div>
+            <div class="panel"><div class="panel-title"><h3>Risk distribution across road nodes</h3><span class="muted small">Backend risk classifications</span></div><div id="riskBreakdown" class="risk-breakdown muted">Risk classifications appear after a scenario loads.</div><p class="muted small panel-subtitle">The current risk API provides low, medium, high and critical levels; it does not identify a separate safe-zone tier.</p></div>
+          </div>
+          <aside class="scenario-panel" id="viewScenario" aria-label="Scenario options">
+    <div class="side-scroll" id="scenarioForm"><div class="skeleton" style="height:14rem"></div></div>
+    <footer class="side-foot">
+      <label class="switch"><input type="checkbox" id="autoUpdate" checked><span></span>Update map as I change options</label>
+      <div class="row">
+        <button class="btn primary grow" id="bGenerate" disabled>Generate</button>
+        <button class="btn" id="bApplyLive" disabled title="Change intensity, spread and size of the running disaster without restarting">Apply live</button>
+      </div>
+    </footer>
   </aside>
+        </div>
+      </section>
+
+      <!-- 3: Road network and Traffic -->
+      <section class="page hidden" id="page-roads" aria-labelledby="roadsHeading">
+        <div class="page-heading"><div><p class="eyebrow">TRANSPORT OPERATIONS</p><h2 id="roadsHeading">Road Network &amp; Traffic</h2><p>Road accessibility, congestion, one-way streets and hazard hotspots.</p></div><button class="btn" id="bRefreshRoads" type="button">Refresh network data</button></div>
+        <div class="panel map-panel"><div class="panel-title"><h3>Road network map</h3><span class="muted small">Hover roads for class, lanes, speed, status and risk</span></div><div class="map-slot" id="mapSlotRoads"></div></div>
+        <div id="networkKpis" class="stat-grid"></div>
+        <div class="two-panels">
+          <section class="panel"><div class="panel-title"><h3>Road classifications</h3><span id="roadDataSet" class="muted small">Loading</span></div><div class="chart-box large-chart"><canvas id="roadClassChart"></canvas></div><div id="networkClasses" class="network-classes"></div></section>
+          <section class="panel"><div class="panel-title"><h3>Live road accessibility</h3><span class="muted small">Per road segment</span></div><div id="roadStatus" class="status-rows muted">Awaiting simulation state</div><div class="panel-subtitle">Congestion &amp; risk use the current session. Traffic conditions change as the simulation advances. Per-segment travel times and capacities are not exposed by the current hotspot API.</div></section>
+        </div>
+        <section class="panel"><div class="panel-title"><h3>Road hotspots</h3><div class="row"><label for="hotspotBy" class="muted small">Rank by</label><select id="hotspotBy"><option value="exposure">Hazard exposure</option><option value="congestion">Congestion</option><option value="risk">Road risk</option></select></div></div><div class="table-wrap"><table><thead><tr><th>Class / status</th><th>Length</th><th>Speed</th><th>Lanes</th><th>One-way</th><th id="hotspotMetricHead">Hazard exposure</th></tr></thead><tbody id="hotspotRows"></tbody></table></div><p id="hotspotEmpty" class="muted small">No hotspot data yet.</p></section>
+      </section>
+
+      <!-- 4: Evacuation Management -->
+      <section class="page hidden" id="page-evacuation" aria-labelledby="evacHeading">
+        <div class="page-heading"><div><p class="eyebrow">FIELD RESPONSE</p><h2 id="evacHeading">Evacuation Management</h2><p>Live people movement, route comparisons and shelter operations.</p></div></div>
+        <div id="evacKpis" class="stat-grid"></div>
+        <div class="feature-grid evacuation-grid"><div class="feature-main"><div class="panel map-panel"><div class="panel-title"><h3>Evacuation routes &amp; movement</h3><span class="muted small">Click the map to choose a route origin</span></div><div class="map-slot" id="mapSlotEvacuation"></div></div></div>
+          <section class="panel route-panel"><div class="panel-title"><h3>Route planning</h3></div><p class="muted small">Click anywhere on the map to choose where people start. Both routes use current hazard and traffic.</p><div id="routeCards" class="route-cards"><div class="skeleton" style="height:9rem"></div></div><div class="row"><button class="btn" id="bRecalc" disabled>Recompute</button><button class="btn" id="bReroute" disabled title="Ask every active evacuee to re-plan at their next junction">Reroute everyone</button></div></section>
+        </div>
+        <section class="panel"><div class="panel-title"><h3>Shelter management</h3><span class="muted small">Select a shelter to locate it on the map</span></div><ul id="shelterList" class="shelters shelter-grid"></ul></section>
+      </section>
+
+      <!-- 5: Analytics and data sources -->
+      <section class="page hidden" id="page-analytics" aria-labelledby="analyticsHeading">
+        <div class="page-heading"><div><p class="eyebrow">PERFORMANCE &amp; TRANSPARENCY</p><h2 id="analyticsHeading">Analytics &amp; Data Sources</h2><p>Compare evacuation strategies and audit the loaded dataset.</p></div></div>
+        <section class="panel"><div class="panel-title"><h3>Live performance indicators</h3><span class="muted small">Current simulation</span></div><div id="analyticsMetrics" class="stat-grid"></div></section>
+        <section class="panel"><div class="panel-title"><h3>Baseline vs risk-aware simulation</h3><button class="btn primary" id="bCompare" disabled>Run full comparison</button></div><p class="muted small">Runs the same scenario twice, comparing nearest-shelter baseline with the risk-aware proposed strategy.</p>
+          <div id="cmpOut" class="hidden"><p id="cmpSummary" class="summary"></p><div class="table-wrap"><table id="cmpTable"></table></div><div class="chart-head"><h3>Comparison curves</h3><div class="seg tight" id="cmpMode" role="radiogroup" aria-label="Comparison chart"><button role="radio" data-v="evac" aria-checked="true">Evacuated</button><button role="radio" data-v="expo" aria-checked="false">Exposure</button></div></div><div class="chart-box large-chart"><canvas id="cmpChart"></canvas></div><p class="muted small">* Trip times count only people who reached a shelter. These simulated results must not be interpreted as real-world disaster predictions.</p></div>
+        </section>
+        <section class="panel"><div class="panel-title"><h3>Dataset &amp; provenance</h3><span id="datasetBadge" class="info-tag">Loading provenance</span></div><div id="datasetDetail" class="dataset-content muted">Loading dataset metadata from the backend…</div></section>
+      </section>
+    </main>
+  </div>
 </div>
 
-<nav class="tabbar" aria-label="Sections">
-  <button data-view="scenario"><svg class="ic"><use href="#i-scenario"/></svg>Scenario</button>
-  <button data-view="map" aria-current="page"><svg class="ic"><use href="#i-map"/></svg>Map</button>
-  <button data-view="insights"><svg class="ic"><use href="#i-chart"/></svg>Insights</button>
-</nav>
+<!-- The ONE existing Leaflet instance is relocated to the active map view. -->
+<div id="mapStorage" hidden><section class="stage map-stage" id="viewMap" aria-label="Map">
+    <div id="map" role="application" aria-label="Interactive evacuation map"></div>
 
+    <div class="map-tools" id="layerChips" role="group" aria-label="Map layers"></div>
+    <div class="pick-hint hidden" id="pickHint"><svg class="ic"><use href="#i-target"/></svg> Click the map to place the epicentre <kbd>Esc</kbd> cancel</div>
+    <button class="btn sm legend-btn" id="bLegend" aria-expanded="false">Legend</button>
+    <div class="legend hidden" id="legend"></div>
+
+
+  </section></div>
 <div id="toasts" aria-live="polite"></div>
-
-<dialog id="helpDlg">
-  <h2>Keyboard shortcuts</h2>
-  <dl class="keys">
-    <dt><kbd>Space</kbd></dt><dd>Play / pause</dd><dt><kbd>→</kbd></dt><dd>Step 30 seconds</dd>
-    <dt><kbd>R</kbd></dt><dd>Reset simulation</dd><dt><kbd>G</kbd></dt><dd>Generate scenario</dd>
-    <dt><kbd>P</kbd></dt><dd>Place epicentre on map</dd><dt><kbd>Esc</kbd></dt><dd>Cancel placing</dd>
-    <dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></dt><dd>Live / Routes / Compare</dd>
-  </dl>
-  <form method="dialog"><button class="btn primary">Close</button></form>
-</dialog>
-
+<dialog id="helpDlg"><h2>Keyboard shortcuts</h2><dl class="keys"><dt><kbd>Space</kbd></dt><dd>Play / pause</dd><dt><kbd>→</kbd></dt><dd>Step 30 seconds</dd><dt><kbd>R</kbd></dt><dd>Reset</dd><dt><kbd>G</kbd></dt><dd>Generate</dd><dt><kbd>P</kbd></dt><dd>Pick disaster epicentre</dd><dt><kbd>Esc</kbd></dt><dd>Cancel picking / close sidebar</dd></dl><p class="muted small">Route selection is available on the Evacuation Management map.</p><form method="dialog"><button class="btn primary">Close</button></form></dialog>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="js/utils.js"></script>
@@ -174,6 +181,7 @@
 <script src="js/simulation.js"></script>
 <script src="js/scenario.js"></script>
 <script src="js/panels.js"></script>
+<script src="js/pages.js"></script>
 <script src="js/app.js"></script>
 <script src="js/provenance.js"></script>
 </body>

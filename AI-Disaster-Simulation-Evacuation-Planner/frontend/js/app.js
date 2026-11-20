@@ -12,12 +12,7 @@ const App = (() => {
     let t = null; try { t = localStorage.getItem('evac.theme'); } catch (e) { /* ignore */ }
     applyTheme(t || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
   }
-  const setView = v => { document.body.dataset.view = v; qsa('.tabbar button').forEach(b => b.toggleAttribute('aria-current', b.dataset.view === v)); if (v === 'map') setTimeout(MapView.invalidate, 50); };
   const qsa = s => [...document.querySelectorAll(s)];
-  function setTab(name) {
-    qsa('.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
-    ['live', 'routes', 'compare'].forEach(n => $('tab-' + n).classList.toggle('hidden', n !== name));
-  }
   const showApiError = e => { $('apiErrorText').textContent = e.message; $('apiError').classList.remove('hidden'); };
 
   /* ---- generate ------------------------------------------------------------------------------------------- */
@@ -55,7 +50,7 @@ const App = (() => {
 
   /* ---- simulation ---------------------------------------------------------------------------------------- */
   function onState(st) {
-    lastState = st; MapView.render(st); Panels.update(st); Charts.push(st.metrics);
+    lastState = st; MapView.render(st); Panels.update(st); Charts.push(st.metrics); Pages.updateState(st);
     $('clock').textContent = fmtClock(st.time_s); $('clockOf').textContent = 'of ' + fmtClock(duration);
     $('trackFill').style.width = Math.min(100, 100 * st.time_s / duration) + '%';
   }
@@ -79,7 +74,7 @@ const App = (() => {
     try {
       lastOrigin = ll || null;
       const p = await API.post('/evacuation/plan', ll ? {lat: ll.lat, lon: ll.lng} : {});
-      Panels.setPlan(p); MapView.drawRoutes(p, !!ll); setTab('routes'); if (ll) toast('Routes updated for this origin. See Insights > Routes.', 'info', 2600);
+      Panels.setPlan(p); MapView.drawRoutes(p, !!ll); Pages.goto('evacuation'); if (ll) toast('Routes updated for the selected origin.', 'info', 2600);
     } catch (e) { toast(e.message, 'error'); }
   }
   async function compare() {
@@ -95,7 +90,7 @@ const App = (() => {
 
   /* ---- boot ------------------------------------------------------------------------------------------------ */
   function wire() {
-    $('bTheme').onclick = () => { const t = document.body.dataset.theme === 'dark' ? 'light' : 'dark'; applyTheme(t); MapView.setTheme(t); Charts.restyle(); };
+    $('bTheme').onclick = () => { const t = document.body.dataset.theme === 'dark' ? 'light' : 'dark'; applyTheme(t); MapView.setTheme(t); Charts.restyle(); Pages.onTheme(); };
     $('bHelp').onclick = () => $('helpDlg').showModal();
     $('bRetry').onclick = () => { $('apiError').classList.add('hidden'); boot(); };
     $('bGenerate').onclick = generate; $('bApplyLive').onclick = applyLive;
@@ -107,8 +102,6 @@ const App = (() => {
     bindSeg($('speedSeg'), v => { Sim.setSpeed(v); $('bSpeed').textContent = v + '×'; });
     $('bSpeed').onclick = () => { const order = ['1', '2', '5', '10'], cur = $('bSpeed').textContent.replace('×', ''), next = order[(order.indexOf(cur) + 1) % order.length];
       Sim.setSpeed(next); setSeg($('speedSeg'), next); $('bSpeed').textContent = next + '×'; }; bindSeg($('chartMode'), v => Charts.setMode(v)); bindSeg($('cmpMode'), v => Charts.setCmpMode(v));
-    qsa('.tabs button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
-    qsa('.tabbar button').forEach(b => b.onclick = () => setView(b.dataset.view));
     Sim.bind({state: onState, change: updateButtons,
       finished: st => { toast('Evacuation finished: ' + fmtNum(st.metrics.evacuated) + ' of ' + fmtNum(st.metrics.ordered) + ' people reached a shelter', 'good', 5000); Panels.addEvent('Simulation finished', 'info', st.time_s); },
       error: e => { toast(e.message, 'error'); if (e.network) showApiError(e); }});
@@ -119,10 +112,10 @@ const App = (() => {
       else if (k === 'arrowright') step();
       else if (k === 'r') resetSim().catch(() => {});
       else if (k === 'g') generate();
-      else if (k === 'p') MapView.setPick(true);
-      else if (k === 'escape') MapView.setPick(false);
+      else if (k === 'p') { Pages.goto('disaster'); setTimeout(() => MapView.setPick(true), 50); }
+      else if (k === 'escape') { MapView.setPick(false); document.body.classList.remove('nav-open'); $('navBackdrop').hidden = true; $('bMenu').setAttribute('aria-expanded', 'false'); }
       else if (k === '?') $('helpDlg').showModal();
-      else if (['1', '2', '3'].includes(k)) setTab(['live', 'routes', 'compare'][+k - 1]);
+      else if (['1', '2', '3', '4', '5'].includes(k)) Pages.goto(['dashboard', 'disaster', 'roads', 'evacuation', 'analytics'][+k - 1]);
     });
   }
 
@@ -139,13 +132,14 @@ const App = (() => {
 
   function start() {
     initTheme();
+    Pages.init();
     MapView.init({
       onOrigin: ll => plan(ll),
       onShelter: () => {},
       onEpicentre: (ll, final) => Scenario.setCenter(ll.lat, ll.lng, final),
     });
-    Panels.bind({onShelter: id => { MapView.openShelter(id); if (document.body.dataset.view === 'insights') setView('map'); }});
-    Charts.init(); wire(); setView('map'); updateButtons(); boot();
+    Panels.bind({onShelter: id => { Pages.goto('evacuation'); requestAnimationFrame(() => MapView.openShelter(id)); }});
+    Charts.init(); wire(); Pages.nav(); updateButtons(); boot();
   }
   return {start};
 })();
